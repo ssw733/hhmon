@@ -85,7 +85,8 @@
       "query": "data science",
       "areas": [1],
       "search_period_days": 1,
-      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "include_keywords": ["data", "данн", "ml", "machine", "модел"],
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер", "маркетолог", "недвижим"],
       "profile_paths": ["profile.md", "profiles/data.md"]
     },
     {
@@ -93,7 +94,8 @@
       "query": "аналитик данных",
       "areas": [1],
       "search_period_days": 1,
-      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "include_keywords": ["данн", "data", "sql", "bi", "дашборд", "метрик"],
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер", "маркетолог", "недвижим"],
       "profile_paths": ["profile.md", "profiles/data.md"]
     },
     {
@@ -101,6 +103,7 @@
       "query": "machine learning",
       "areas": [1],
       "search_period_days": 1,
+      "include_keywords": ["ml", "machine", "модел", "data", "нейросет"],
       "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
       "profile_paths": ["profile.md", "profiles/ml.md"]
     },
@@ -109,6 +112,7 @@
       "query": "embedded разработчик",
       "areas": [1],
       "search_period_days": 1,
+      "include_keywords": ["embedded", "встраива", "микроконтрол", "rtos", "firmware", "c++"],
       "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
       "profile_paths": ["profile.md", "profiles/embedded.md"]
     }
