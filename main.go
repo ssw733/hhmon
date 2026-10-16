@@ -45,6 +45,7 @@ func main() {
 	listN := flag.Int("list", 0, "print the N most recent saved vacancies (with cover letters) and exit")
 	web := flag.Bool("web", false, "serve a local web UI")
 	addr := flag.String("addr", "127.0.0.1:8080", "web UI listen address")
+	exportPath := flag.String("export", "", "export a static HTML snapshot of the UI to this file and exit")
 	flag.Parse()
 
 	cfg, err := loadConfig(*configPath)
@@ -97,6 +98,15 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	if *exportPath != "" {
+		ws := &webServer{cfg: cfg, store: store, mon: m, buf: logBuf}
+		if err := ws.exportStatic(*exportPath); err != nil {
+			logger.Fatalf("export: %v", err)
+		}
+		logger.Printf("preview exported: %s", *exportPath)
+		return
+	}
 
 	total, _ := store.Count()
 	logger.Printf("=== hhmon started === searches=%d interval=%ds db_vacancies=%d",

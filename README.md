@@ -33,6 +33,7 @@ go build -o hhmon .
 ./hhmon -list 10                       # показать 10 последних вакансий с письмами
 ./hhmon -config config.json -web       # + локальный веб-интерфейс (127.0.0.1:8080)
 ./hhmon -config config.json -web -addr 127.0.0.1:9000   # свой адрес
+./hhmon -config config.json -export preview.html        # статичный снапшот UI в файл
 ```
 
 Останов — `Ctrl+C` (graceful shutdown).
@@ -51,6 +52,10 @@ go build -o hhmon .
 - шапка — счётчики (всего / с письмом / последний скан).
 
 Биндинг по умолчанию только на `127.0.0.1` (локально).
+
+Если нужно отправить UI кому-то или просто открыть без запуска сервера —
+`./hhmon -config config.json -export preview.html` сделает самодостаточный
+HTML со вшитыми данными (в репозитории лежит пример `preview.html`).
 
 ## Конфиг
 

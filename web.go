@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -148,4 +151,57 @@ func (w *webServer) handleScan(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(rw, map[string]int{"new": n})
+}
+
+// exportStatic writes a self-contained snapshot of the UI with data baked in,
+// so it can be opened locally without running the server.
+func (w *webServer) exportStatic(path string) error {
+	vs, err := w.store.Recent(1000)
+	if err != nil {
+		return err
+	}
+	list := make([]vacancyListItem, 0, len(vs))
+	details := make(map[string]Vacancy, len(vs))
+	for _, v := range vs {
+		list = append(list, vacancyListItem{
+			ID: v.ID, Title: v.Title, Company: v.Company, Region: v.Region, Salary: v.Salary,
+			URL: v.URL, FoundAt: v.FoundAt.Format(time.RFC3339),
+			PublishedAt: v.PublishedAt.Format(time.RFC3339), HasLetter: v.CoverLetter != "",
+		})
+		details[v.ID] = v
+	}
+	total, _ := w.store.Count()
+	withLetter, _ := w.store.CountWithLetters()
+	searches := make([]searchStatus, 0, len(w.mon.searches))
+	for _, s := range w.mon.searches {
+		searches = append(searches, searchStatus{Name: s.name, Query: s.search.Query, LLM: describeLLM(s.search, w.cfg)})
+	}
+	lastRun := ""
+	if t := w.mon.LastRun(); !t.IsZero() {
+		lastRun = t.Format(time.RFC3339)
+	}
+	status := statusResponse{
+		Searches: searches, PollInterval: w.cfg.PollIntervalSec,
+		Total: total, WithLetter: withLetter, LastRun: lastRun, LastNew: w.mon.LastNew(),
+		SeedFirstRun: w.cfg.SeedOnFirstRun,
+	}
+	logLines := w.buf.Snapshot()
+	if len(logLines) == 0 {
+		if b, err := os.ReadFile(w.cfg.LogPath); err == nil {
+			logLines = strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+		}
+	}
+	data := map[string]any{
+		"status":    status,
+		"vacancies": list,
+		"details":   details,
+		"log":       logLines,
+	}
+	blob, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	inject := []byte("<script>window.__STATIC_DATA__=" + string(blob) + ";</script>\n<script>")
+	out := bytes.Replace(indexHTML, []byte("<script>"), inject, 1)
+	return os.WriteFile(path, out, 0o644)
 }

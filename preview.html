@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>hhmon — новые вакансии</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d2129; --line:#2a2f3a;
+    --text:#e6e9ef; --muted:#8b93a7; --accent:#4f8cff; --ok:#37c98b; --warn:#ffb454;
+    --danger:#ff5c6c;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,Arial,sans-serif}
+  header{display:flex;align-items:center;gap:16px;padding:12px 18px;
+    background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+  .stats{display:flex;gap:18px;margin-left:auto;color:var(--muted);font-size:13px}
+  .stats b{color:var(--text)}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;
+    padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600}
+  button:hover{filter:brightness(1.1)}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--text);font-weight:500}
+  button.small{padding:5px 10px;font-size:12px;border-radius:6px}
+  .layout{display:grid;grid-template-columns:380px 1fr;height:calc(100vh - 57px)}
+  .sidebar{border-right:1px solid var(--line);overflow:auto;background:var(--panel)}
+  .list{list-style:none;margin:0;padding:0}
+  .item{padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+  .item:hover{background:var(--panel2)}
+  .item.active{background:#20283a;box-shadow:inset 3px 0 0 var(--accent)}
+  .item .t{font-weight:600;margin-bottom:3px;display:flex;gap:8px;align-items:baseline}
+  .badge{font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(55,201,139,.15);
+    color:var(--ok);border:1px solid rgba(55,201,139,.4);white-space:nowrap}
+  .item .m{color:var(--muted);font-size:12px;display:flex;gap:8px;flex-wrap:wrap}
+  .detail{padding:22px 26px;overflow:auto}
+  .detail h2{margin:0 0 6px;font-size:20px}
+  .meta{color:var(--muted);font-size:13px;margin-bottom:14px;display:flex;gap:14px;flex-wrap:wrap}
+  .meta a{color:var(--accent);text-decoration:none}
+  .toolbar{display:flex;gap:8px;margin:14px 0}
+  .label{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:18px 0 6px}
+  textarea{width:100%;min-height:260px;background:var(--panel);color:var(--text);
+    border:1px solid var(--line);border-radius:10px;padding:14px;font:14px/1.6 inherit;resize:vertical}
+  pre.desc{white-space:pre-wrap;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:14px;max-height:340px;overflow:auto;color:#cfd5e3;font-size:13px}
+  details summary{cursor:pointer;color:var(--muted);margin:6px 0}
+  .empty{color:var(--muted);padding:40px;text-align:center}
+  .panel{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:14px 0;background:var(--panel)}
+  .panel .row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px dashed var(--line)}
+  .panel .row:last-child{border-bottom:0}
+  .panel .row span:last-child{color:var(--muted);text-align:right}
+  #log{position:fixed;right:16px;bottom:16px;width:640px;max-width:90vw;height:300px;
+    background:#0b0d11;border:1px solid var(--line);border-radius:10px;display:none;flex-direction:column;overflow:hidden;z-index:20}
+  #log.open{display:flex}
+  #log .h{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+  #log pre{margin:0;padding:10px 12px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#b9c0d0;flex:1}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ok);
+    color:#04160d;padding:8px 16px;border-radius:8px;font-weight:600;opacity:0;transition:.2s;z-index:30}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>hhmon</h1>
+  <button id="scanBtn" class="small">Сканировать</button>
+  <button id="logBtn" class="ghost small">Лог</button>
+  <div class="stats">
+    <div>всего: <b id="sTotal">0</b></div>
+    <div>с письмом: <b id="sLetter">0</b></div>
+    <div>последний скан: <b id="sLast">—</b></div>
+    <div>новых: <b id="sNew">0</b></div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar"><ul id="list" class="list"></ul></aside>
+  <main class="detail" id="detail">
+    <div class="empty">Выбери вакансию слева</div>
+  </main>
+</div>
+
+<div id="log"><div class="h"><b>Лог</b><button class="ghost small" id="logClose">закрыть</button></div><pre id="logBody"></pre></div>
+<div class="toast" id="toast">Скопировано</div>
+
+<script>window.__STATIC_DATA__={"details":{"138016940":{"id":"138016940","title":"Team Lead кросс-функциональной команды разработки","company":"КСК-Эйч Ар","url":"https://hh.ru/vacancy/138016940","region":"Москва","salary":"не указан","description":"Ведущий цифровой банк, сервисами которого ежемесячно пользуются более 12 млн жителей Узбекистана, ищет Team Lead кросс-функциональной команды разработки.\n\nСтек: Java, Go, Python, Spring Boot, Hibernate, Liquibase, PostgreSQL, Oracle, Kafka, Redis, Docker/Podman, Kubernetes, Gitlab, EFK, Grafana.\n\nЧем предстоит заниматься:\n\nУправление полным циклом разработки в кросс-функциональной команде до 10 FTE (BE, QA, SA): от бизнес-требований до продакшена и поддержки.\n\nТехническое менторство, развитие команды, 1-to-1, PDP, найм и технические интервью.\n\nАрхитектурное видение продукта: API, модели данных, границы сервисов, рефакторинг, техдолг.\n\nВзаимодействие с продуктом, проектом и стейкхолдерами: бэклог, приоритизация, прозрачность статусов.\n\nНаблюдаемость, отказоустойчивость, производительность, инциденты, дежурства, CI/CD, метрики и процессы.\n\nЧто важно:\n\nОпыт управления командой разработки от 3 лет.\n\nТехлидерство: Java/Go, 5+ лет продового Go или глубокая Java-экспертиза.\n\nКод-ревью, архитектурные решения, распределённые системы, микросервисы, идемпотентность, eventual consistency, контрактные интеграции.\n\nПродовый Kubernetes: деплойменты, canary/blue-green, autoscaling.\n\nПроцессы: Scrum/Kanban, бэклог, релизы, автотесты, инцидент-менеджмент, мониторинг, логи, алертинг.\n\nPeople management: мотивация, 1:1, выявление зон роста, PDP.\n\nФинтех: платёжные API, эквайринг, процессинг; highload и отказоустойчивость.\n\nБудет плюсом:\n\nKanban, Visa/Mastercard, внешние партнёры, PCI DSS, Kubernetes.\n\nМы предлагаем:\n\nFintech-платформу с миллионами пользователей, международную команду, удалёнку, гибкость и отсутствие бюрократии.\n\nОфициальное трудоустройство, конкурентную ЗП, обучение, ДМС и дисконт-программы.","cover_letter":"Здравствуйте!\n\nМеня заинтересовала вакансия Team Lead, так как мой опыт объединяет глубокую техническую экспертизу в Go и работу в FinTech. Более 9 лет я занимаюсь backend-разработкой, в том числе созданием внутренней инфраструктуры в «Цифра Банк», что дало мне понимание специфики банковских систем и требований к их отказоустойчивости.\n\nВ моем стеке Go занимает центральное место при разработке серверных решений и REST API. Я обладаю сильной базой в работе с SQL и NoSQL (PostgreSQL, MySQL), специализируюсь на оптимизации запросов и проектировании нестандартных архитектурных решений. Имею практический опыт работы с Docker, Nginx и CI/CD, а также стремлюсь к решению задач в области highload. Кроме того, мой опыт в блокчейн-разработке и создании смарт-контрактов позволяет мне быстро осваивать сложные распределенные системы.\n\nМеня привлекает возможность применить свои навыки в масштабном цифровом банке и развивать кросс-функциональную команду, обеспечивая высокое качество кода и производительность продукта.\n\nБуду рад обсудить мой опыт и потенциальный вклад в ваши проекты на интервью.","found_at":"2026-10-16T17:30:09+04:00","published_at":"2026-10-16T14:54:52+03:00"},"138559039":{"id":"138559039","title":"Руководитель команды разработки","company":"Защищенные Телекоммуникации","url":"https://hh.ru/vacancy/138559039","region":"Тула","salary":"не указан","description":"Требования:\n\nРелевантный опыт работы от 6-ти лет;\n\nЗнание Golang: опыт работы с конкурирующими goroutines, каналами, управлением контекстом и профилированием производительности;\n\nПонимание принципов построения микросервисной архитектуры;\n\nОпыт реализации RESTful API и GraphQL для создания гибких и эффективных интерфейсов взаимодействия;\n\nОпыт разработки с использованием PostgreSQL: создание оптимальных запросов, индексация, использование транзакций, триггеров и хранимых процедур;\n\nРабота с Kafka для организации асинхронного обмена сообщениями между сервисами;\n\nПрактический опыт мониторинга и анализа производительности систем с использованием ELK (Elasticsearch, Logstash, Kibana) для логирования, Prometheus и Grafana для метрик и визуализации, а также Jaeger и OpenTelemetry для трассировки распределенных запросов;\n\nСпособность быстро находить и устранять проблемы в сложных production-средах;\n\nОпыт управления командой продуктовой разработки от года;\n\nОпыт работы с legacy-проектами;\n\nОпыт работы с NoSQL БД (Aerospike, Couchbase, Cassandra предпочтительно, но подойдет и Redis, Mongo).\n\nДополнительные требования:\n\nОпыт разработки высоконагруженных систем;\n\nРабота с NATS/Kafka/RabbitMQ для организации асинхронного обмена сообщениями между сервисами;\n\nГлубокое понимание работы docker и docker-compose;\n\nГлубокое понимание работы k8s;\n\nУверенное использование Unix-систем;\n\nОпыт разработки на любом другом языке программирования;\n\nЗнание паттернов проектирования и построения архитектуры системы;\n\nПонимание принципов работы протоколов HTTP (v1/v2/v3);\n\nУмение использовать gRPC/Protobuf или аналоги.\n\nЗадачи:\n\nРуководить разработкой биллинговых сервисов на Go, задавать стандарты конкурентного кода;\n\nПрофилировать производительность сервисов (pprof, trace, benchmark) и устранять узкие места;\n\nПроводить код-ревью и принимать архитектурные решения по развитию сервисов;\n\nПроектировать схемы БД и писать оптимальные SQL-запросы, работать с транзакциями, триггерами и хранимыми процедурами, совместно с DBA настраивать индексацию;\n\nПрофилировать тяжёлые запросы и устранять проблемы производительности БД;\n\nОрганизовывать асинхронный обмен сообщениями между сервисами через Kafka с обеспечением идемпотентности и консистентности биллинговых операций;\n\nБыстро диагностировать и устранять инциденты в сложных production-средах;\n\nПонимать и применять Docker и docker-compose в разработке и деплое;\n\nУправлять командой разработки: планирование, распределение задач, контроль сроков, проведение 1to1, участие в найме и онбординге, формировать инженерную культуру;\n\nСинхронизировать работу команды с продуктом и смежными командами;\n\nМодернизировать legacy-код: рефакторинг, выделение сервисов, миграции;\n\nОбеспечивать обратную совместимость при изменениях;\n\nУправлять техническим долгом и приоритизировать его погашение;\n\nПроектировать решения под высокие нагрузки;\n\nОптимизировать latency и throughput критичных биллинговых операций.\n\nМы предлагаем:\n\nНадёжная основа: официальное трудоустройство (ТК РФ) в аккредитованной IT-компании;\nЗдоровье в приоритете: расширенный пакет ДМС, который включает стоматологию и поддержку психолога;\nРабота со смыслом: участие в развитии социально значимого продукта, который помогает людям оставаться на связи в сложной жизненной ситуации;\nСильная команда: мы ценим открытость, ответственность и стремление к результату, создавая среду для профессионального развития каждого;\nЗабота о тонусе: компенсируем часть стоимости вашего абонемента в спортзал;\nУдалённый формат: работа из любого города с возможностью посещать офис в Туле для рабочих сессий, корпоративных событий и неформального общения.","cover_letter":"Здравствуйте!\n\nМеня заинтересовала вакансия в «Защищенных Телекоммуникациях». Мой общий опыт в разработке составляет более 9 лет, из которых последние годы я фокусируюсь на Go, создании REST-сервисов и серверной разработке.\n\nОбладаю глубокой экспертизой в работе с SQL и NoSQL базами данных (PostgreSQL, MySQL, MariaDB), умею оптимизировать сложные запросы и проектировать структуры данных, что критично для биллинговых систем. Имею опыт работы в FinTech (Цифра Банк), где занимался развитием внутренней инфраструктуры, а также опыт разработки в сфере Blockchain и eCommerce. Свободно владею инструментами Docker, Nginx и Linux, имею практический опыт работы с CI/CD.\n\nЯ специализируюсь на проектировании нестандартных решений и стремлюсь к задачам с высокими нагрузками (highload). Мой подход сочетает в себе умение работать с legacy-кодом и активное применение современных AI-инструментов для ускорения рефакторинга и проверки гипотез.\n\nБуду рад обсудить, как мой технический бэкграунд и опыт разработки сложных систем помогут вашей команде в развитии биллинговых сервисов.\n\nГотов к диалогу!","found_at":"2026-10-16T17:30:11+04:00","published_at":"2026-10-16T14:50:09+03:00"},"138563364":{"id":"138563364","title":"Go-разработчик (кастоди цифровых активов)","company":"ТМГТ","url":"https://hh.ru/vacancy/138563364","region":"Москва","salary":"не указан","description":"Ищем одного Go-разработчика уровня Middle+ / Senior в направление кастоди цифровых активов. Задача — интеграция с институциональным кастоди-провайдером и надёжная обработка депозитов, выводов и балансов. Провайдер находится в процессе выбора.\n\nЗадачи Интегрировать API провайдера: кошельки, адреса клиентов, депозиты, выводы и статусы транзакций.\nРеализовывать политики подписания и одобрения операций: лимиты, белые списки и многоступенчатое подтверждение.\nОбрабатывать вебхуки идемпотентно, защищать обработку от повторной доставки и потери событий.\nСверять балансы и операции между блокчейном, провайдером и внутренним учётом на двойной записи.\nВстраивать KYT, Travel Rule и журнал аудита в обработку операций.\nОрганизовывать работу с ключами и секретами по принципу минимальных прав.\nПисать тесты, включая тестовое окружение провайдера; закладывать логи, метрики и трейсы.\nВести задачи с ИИ-агентами по письменным спецификациям и проверять сгенерированные код и тесты.\nОбязательный опыт От 3 лет коммерческой разработки на Go для Middle+ и от 5 лет для Senior.\nGo: конкурентность, горутины, каналы, context, обработка ошибок, тестирование и профилирование.\nPostgreSQL: транзакции, блокировки и миграции.\nВнешние API, вебхуки, подписи запросов, повторные попытки и идемпотентность.\nРабота с деньгами или цифровыми активами: балансы, проводки, сверка и точная арифметика без float.\nПрактика хотя бы с одной блокчейн-сетью; понимание адресов, транзакций, подтверждений, комиссий и реорганизаций цепочки.\nБезопасная работа с ключами и секретами.\nПрактика разработки с ИИ-агентами и критическая проверка результата.\nЗавершённое высшее образование.\nДля Senior Опыт проектирования сервиса с риском потери средств: защита от двойного вывода, неучтённого депозита и ошибок сверки.\n\nТехнологическая среда Go, API кастоди-провайдера, PostgreSQL, Kafka, учёт на двойной записи; AWS, Kubernetes, Istio, GitHub Actions и Argo CD. Общая платформа включает Python / FastAPI: потребуется читать её код.\n\nБудет плюсом Fireblocks, Copper, MPC или HSM.\nUSDC / USDT, операции ввода и вывода фиата.\nПрактика Travel Rule и участия в аудите безопасности.\nPython.\nФормат работы Полная занятость. Возможна удалённая работа.\nРазработка с ИИ-агентами по письменным спецификациям, автоматические проверки и ответственность за результат в production.\nЧто рассказать в отклике Опишите систему с деньгами или цифровыми активами, вашу личную часть на Go, защиту от повторного вывода и механизм сверки балансов. Укажите блокчейн-сеть и кратко расскажите о своём рабочем процессе с ИИ-агентами.","cover_letter":"Здравствуйте!\n\nМеня заинтересовала вакансия Go-разработчика в направлении кастоди цифровых активов, так как мой опыт объединяет разработку на Go, работу в FinTech и глубокую экспертизу в блокчейне.\n\nОбщий стаж в разработке составляет более 9 лет. В последние годы фокусируюсь на Go, создавая REST-сервисы и серверную инфраструктуру. Имею опыт работы в «Цифра Банк», где занимался внутренней инфраструктурой, что дало мне понимание специфики работы с финансовыми данными. Параллельно развивал блокчейн-проекты: писал смарт-контракты на Solidity, работал с сетью Ethereum, Web3 и DEX. Владею SQL на высоком уровне (PostgreSQL, MySQL), умею оптимизировать запросы и работать с транзакциями, что критично для обеспечения точности балансов и сверки операций.\n\nВ моем рабочем процессе AI-инструменты занимают центральное место: я использую их для анализа, проектирования, рефакторинга и быстрой проверки гипотез, при этом всегда осуществляю критический контроль сгенерированного кода.\n\nБуду рад обсудить, как мои навыки в Go и опыт в криптосфере помогут в реализации надежной системы кастоди в ТМГТ.","found_at":"2026-10-16T17:30:05+04:00","published_at":"2026-10-16T16:24:43+03:00"}},"log":["2026/10/16 17:30:25 search \"Go backend\": query=\"golang\" areas=[1] llm=chain[ollama/gemma4:31b-cloud]","2026/10/16 17:30:25 search \"PHP backend\": query=\"php разработчик\" areas=[1] llm=chain[ollama/gemma4:31b-cloud]","2026/10/16 17:30:25 search \"Blockchain / Crypto\": query=\"blockchain\" areas=[1] llm=chain[ollama/gemma4:31b-cloud]"],"status":{"searches":[{"name":"Go backend","query":"golang","llm":"chain[ollama/gemma4:31b-cloud]"},{"name":"PHP backend","query":"php разработчик","llm":"chain[ollama/gemma4:31b-cloud]"},{"name":"Blockchain / Crypto","query":"blockchain","llm":"chain[ollama/gemma4:31b-cloud]"}],"poll_interval_seconds":25,"total":3,"with_letter":3,"last_run":"","last_new":0,"seed_on_first_run":false},"vacancies":[{"id":"138559039","title":"Руководитель команды разработки","company":"Защищенные Телекоммуникации","region":"Тула","salary":"не указан","url":"https://hh.ru/vacancy/138559039","found_at":"2026-10-16T17:30:11+04:00","published_at":"2026-10-16T14:50:09+03:00","has_letter":true},{"id":"138016940","title":"Team Lead кросс-функциональной команды разработки","company":"КСК-Эйч Ар","region":"Москва","salary":"не указан","url":"https://hh.ru/vacancy/138016940","found_at":"2026-10-16T17:30:09+04:00","published_at":"2026-10-16T14:54:52+03:00","has_letter":true},{"id":"138563364","title":"Go-разработчик (кастоди цифровых активов)","company":"ТМГТ","region":"Москва","salary":"не указан","url":"https://hh.ru/vacancy/138563364","found_at":"2026-10-16T17:30:05+04:00","published_at":"2026-10-16T16:24:43+03:00","has_letter":true}]};</script>
+<script>
+const $ = (id) => document.getElementById(id);
+let selected = null;
+const STATIC = window.__STATIC_DATA__ || null;
+
+function staticRoute(url){
+  const u = new URL(url, 'http://local');
+  const p = u.pathname;
+  if(p === '/api/status') return STATIC.status;
+  if(p === '/api/vacancies') return STATIC.vacancies.slice(0, +(u.searchParams.get('limit')||100));
+  if(p === '/api/vacancy') return STATIC.details[u.searchParams.get('id')] || {};
+  if(p === '/api/log') return STATIC.log || [];
+  if(p === '/api/scan') return {new:0};
+  return {};
+}
+async function j(url, opt){
+  if(STATIC) return staticRoute(url);
+  const r = await fetch(url, opt);
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+function relTime(iso){
+  if(!iso) return "";
+  const d = new Date(iso); if(isNaN(d)) return "";
+  const s = Math.floor((Date.now()-d.getTime())/1000);
+  if(s < 60) return s+" сек назад";
+  if(s < 3600) return Math.floor(s/60)+" мин назад";
+  if(s < 86400) return Math.floor(s/3600)+" ч назад";
+  return Math.floor(s/86400)+" дн назад";
+}
+function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML;}
+
+async function refreshStatus(){
+  try{
+    const st = await j('/api/status');
+    $('sTotal').textContent = st.total;
+    $('sLetter').textContent = st.with_letter;
+    $('sNew').textContent = st.last_new;
+    $('sLast').textContent = st.last_run ? relTime(st.last_run) : '—';
+  }catch(e){}
+}
+
+async function refreshList(){
+  let items = [];
+  try{ items = await j('/api/vacancies?limit=100'); }catch(e){ return; }
+  const ul = $('list');
+  if(items.length === 0){
+    ul.innerHTML = '<li class="empty" style="list-style:none">Пока пусто.<br>Нажми «Сканировать».</li>';
+    return;
+  }
+  ul.innerHTML = items.map(v => `
+    <li class="item ${v.id===selected?'active':''}" data-id="${v.id}">
+      <div class="t">${esc(v.title)} ${v.has_letter?'<span class="badge">письмо</span>':''}</div>
+      <div class="m">
+        <span>${esc(v.company)}</span>
+        <span>${esc(v.region)}</span>
+        ${v.salary?'<span>'+esc(v.salary)+'</span>':''}
+        <span>${relTime(v.found_at)}</span>
+      </div>
+    </li>`).join('');
+  ul.querySelectorAll('.item').forEach(el => el.onclick = () => load(el.dataset.id));
+}
+
+async function load(id){
+  selected = id;
+  const v = await j('/api/vacancy?id='+encodeURIComponent(id));
+  $('detail').innerHTML = `
+    <h2>${esc(v.Title || v.title)}</h2>
+    <div class="meta">
+      <span>${esc(v.Company || v.company)}</span>
+      <span>${esc(v.Region || v.region)}</span>
+      ${(v.Salary||v.salary)?'<span>'+esc(v.Salary||v.salary)+'</span>':''}
+      <span>опубликовано: ${relTime(v.PublishedAt || v.published_at)}</span>
+      <a href="${esc(v.URL || v.url)}" target="_blank" rel="noopener">открыть на hh.ru →</a>
+    </div>
+    <div class="toolbar">
+      <button id="copyBtn" class="small">Скопировать сопроводительное</button>
+      <button id="openBtn" class="ghost small">Открыть вакансию</button>
+    </div>
+    <div class="label">Сопроводительное письмо</div>
+    <textarea id="letter">${esc(v.CoverLetter ?? v.cover_letter ?? '')}</textarea>
+    <div class="label">Описание вакансии</div>
+    <details><summary>показать</summary><pre class="desc">${esc(v.Description ?? v.description ?? '')}</pre></details>`;
+  $('copyBtn').onclick = () => copy($('letter').value);
+  $('openBtn').onclick = () => window.open(v.URL || v.url, '_blank');
+  refreshList();
+}
+
+function copy(text){
+  navigator.clipboard.writeText(text).then(()=>{
+    const t=$('toast'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1200);
+  });
+}
+
+async function doScan(){
+  $('scanBtn').disabled = true; $('scanBtn').textContent = 'Сканирую…';
+  try{ await j('/api/scan', {method:'POST'}); }
+  catch(e){ alert('Ошибка скана: '+e.message); }
+  $('scanBtn').disabled = false; $('scanBtn').textContent = 'Сканировать';
+  await refreshStatus(); await refreshList();
+}
+
+async function refreshLog(){
+  if(!$('log').classList.contains('open')) return;
+  try{ const lines = await j('/api/log?lines=200'); $('logBody').textContent = lines.join('\n'); }catch(e){}
+}
+
+$('scanBtn').onclick = doScan;
+$('logBtn').onclick = () => {$('log').classList.add('open'); refreshLog();};
+$('logClose').onclick = () => $('log').classList.remove('open');
+
+refreshStatus(); refreshList();
+setInterval(refreshStatus, 5000);
+setInterval(refreshList, 5000);
+setInterval(refreshLog, 3000);
+</script>
+</body>
+</html>

@@ -86,8 +86,20 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let selected = null;
+const STATIC = window.__STATIC_DATA__ || null;
 
+function staticRoute(url){
+  const u = new URL(url, 'http://local');
+  const p = u.pathname;
+  if(p === '/api/status') return STATIC.status;
+  if(p === '/api/vacancies') return STATIC.vacancies.slice(0, +(u.searchParams.get('limit')||100));
+  if(p === '/api/vacancy') return STATIC.details[u.searchParams.get('id')] || {};
+  if(p === '/api/log') return STATIC.log || [];
+  if(p === '/api/scan') return {new:0};
+  return {};
+}
 async function j(url, opt){
+  if(STATIC) return staticRoute(url);
   const r = await fetch(url, opt);
   if(!r.ok) throw new Error(await r.text());
   return r.json();
