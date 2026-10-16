@@ -1,0 +1,260 @@
+{
+  "poll_interval_seconds": 25,
+  "request_jitter_ms": 800,
+  "llm_timeout_seconds": 240,
+  "seed_on_first_run": true,
+  "db_path": "hhmon.db",
+  "log_path": "hhmon.log",
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "base_url": "http://127.0.0.1:1337/v1",
+    "api_key": "",
+    "temperature": 0.6,
+    "max_tokens": 1200
+  },
+  "llm_chain": [
+    {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "base_url": "http://127.0.0.1:1337/v1"
+    },
+    {
+      "provider": "openai",
+      "model": "gpt-3.5-turbo",
+      "base_url": "http://127.0.0.1:1337/v1"
+    },
+    {
+      "provider": "openai",
+      "model": "deepseek-chat",
+      "base_url": "http://127.0.0.1:1337/v1"
+    },
+    {
+      "provider": "openai",
+      "model": "llama-3.3-70b",
+      "base_url": "http://127.0.0.1:1337/v1"
+    }
+  ],
+  "apply": {
+    "enabled": false,
+    "dry_run": true,
+    "max_per_day": 20,
+    "min_delay_seconds": 30,
+    "session_path": "session.json",
+    "resume_title_contains": "backend",
+    "questions_via_llm": true,
+    "skip_with_questions": false
+  },
+  "searches": [
+    {
+      "name": "PHP backend",
+      "query": "php разработчик",
+      "areas": [
+        1
+      ],
+      "search_period_days": 1,
+      "exclude_keywords": [
+        "1С",
+        "QA",
+        "тестировщик",
+        "стажёр",
+        "стажер",
+        "продаж",
+        "менеджер"
+      ],
+      "profile_paths": [
+        "profile.md",
+        "profiles/php.md"
+      ]
+    },
+    {
+      "name": "PHP Symfony/Laravel",
+      "query": "symfony laravel",
+      "areas": [
+        1
+      ],
+      "search_period_days": 1,
+      "exclude_keywords": [
+        "1С",
+        "QA",
+        "тестировщик",
+        "стажёр",
+        "стажер",
+        "продаж",
+        "менеджер"
+      ],
+      "profile_paths": [
+        "profile.md",
+        "profiles/php.md"
+      ]
+    },
+    {
+      "name": "Go backend",
+      "query": "golang",
+      "areas": [
+        1
+      ],
+      "search_period_days": 1,
+      "exclude_keywords": [
+        "1С",
+        "QA",
+        "тестировщик",
+        "стажёр",
+        "стажер",
+        "продаж",
+        "менеджер"
+      ],
+      "profile_paths": [
+        "profile.md",
+        "profiles/go.md"
+      ]
+    },
+    {
+      "name": "Backend / highload",
+      "query": "backend разработчик",
+      "areas": [
+        1
+      ],
+      "search_period_days": 1,
+      "exclude_keywords": [
+        "1С",
+        "QA",
+        "тестировщик",
+        "стажёр",
+        "стажер",
+        "продаж",
+        "менеджер"
+      ],
+      "profile_paths": [
+        "profile.md",
+        "profiles/highload.md"
+      ]
+    },
+    {
+      "name": "JavaScript / Node.js",
+      "query": "node.js разработчик",
+      "areas": [
+        1
+      ],
+      "search_period_days": 1,
+      "exclude_keywords": [
+        "1С",
+        "QA",
+        "тестировщик",
+        "стажёр",
+        "стажер",
+        "продаж",
+        "менеджер"
+      ],
+      "profile_paths": [
+        "profile.md",
+        "profiles/js.md"
+      ]
+    },
+    {
+      "name": "Blockchain / Crypto",
+      "query": "blockchain",
+      "areas": [
+        1
+      ],
+      "search_period_days": 1,
+      "exclude_keywords": [
+        "1С",
+        "QA",
+        "тестировщик",
+        "стажёр",
+        "стажер",
+        "продаж",
+        "менеджер"
+      ],
+      "profile_paths": [
+        "profile.md",
+        "profiles/blockchain.md"
+      ]
+    },
+    {
+      "name": "Data Science",
+      "query": "data science",
+      "areas": [
+        1
+      ],
+      "search_period_days": 1,
+      "exclude_keywords": [
+        "1С",
+        "QA",
+        "тестировщик",
+        "стажёр",
+        "стажер",
+        "продаж",
+        "менеджер"
+      ],
+      "profile_paths": [
+        "profile.md",
+        "profiles/data.md"
+      ]
+    },
+    {
+      "name": "Аналитик данных",
+      "query": "аналитик данных",
+      "areas": [
+        1
+      ],
+      "search_period_days": 1,
+      "exclude_keywords": [
+        "1С",
+        "QA",
+        "тестировщик",
+        "стажёр",
+        "стажер",
+        "продаж",
+        "менеджер"
+      ],
+      "profile_paths": [
+        "profile.md",
+        "profiles/data.md"
+      ]
+    },
+    {
+      "name": "ML-инженер",
+      "query": "machine learning",
+      "areas": [
+        1
+      ],
+      "search_period_days": 1,
+      "exclude_keywords": [
+        "1С",
+        "QA",
+        "тестировщик",
+        "стажёр",
+        "стажер",
+        "продаж",
+        "менеджер"
+      ],
+      "profile_paths": [
+        "profile.md",
+        "profiles/ml.md"
+      ]
+    },
+    {
+      "name": "Embedded",
+      "query": "embedded разработчик",
+      "areas": [
+        1
+      ],
+      "search_period_days": 1,
+      "exclude_keywords": [
+        "1С",
+        "QA",
+        "тестировщик",
+        "стажёр",
+        "стажер",
+        "продаж",
+        "менеджер"
+      ],
+      "profile_paths": [
+        "profile.md",
+        "profiles/embedded.md"
+      ]
+    }
+  ]
+}

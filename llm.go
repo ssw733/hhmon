@@ -25,6 +25,19 @@ func resolveKey(k string) string {
 	return k
 }
 
+// isLocalURL reports whether base is a localhost address (keyless local gateway).
+func isLocalURL(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	h := u.Hostname()
+	return h == "localhost" || h == "::1" || strings.HasPrefix(h, "127.")
+}
+
 type Generator interface {
 	Generate(ctx context.Context, system, user string) (string, error)
 }
@@ -151,8 +164,8 @@ func newChainGenerator(cfgs []LLMConfig, logger *log.Logger) (Generator, error) 
 	}
 	c := &chainGen{log: logger}
 	for _, cfg := range cfgs {
-		if !strings.EqualFold(cfg.Provider, "ollama") && resolveKey(cfg.APIKey) == "" {
-			logger.Printf("LLM: %s/%s пропущен — не задан api_key (используй \"env:VAR\")", cfg.Provider, cfg.Model)
+		if !strings.EqualFold(cfg.Provider, "ollama") && resolveKey(cfg.APIKey) == "" && !isLocalURL(cfg.BaseURL) {
+			logger.Printf("LLM: %s/%s пропущен — не задан api_key (используй \"env:VAR\" или локальный base_url)", cfg.Provider, cfg.Model)
 			continue
 		}
 		g, err := newGenerator(cfg)
