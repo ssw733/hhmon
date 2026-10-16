@@ -372,6 +372,7 @@ func (m *Monitor) startApplyWorker(ctx context.Context) {
 			if err := m.applyVacancy(ctx, v); err != nil {
 				m.log.Printf("apply-worker: %s ОШИБКА %v", v.ID, err)
 			}
+			m.log.Printf("apply-worker: пауза %s до следующего отклика", delay)
 			if !sleepCtx(ctx, delay) {
 				return
 			}
@@ -426,8 +427,11 @@ func (m *Monitor) applyPending(ctx context.Context) (int, error) {
 		} else {
 			sent++
 		}
-		if delay > 0 && !sleepCtx(ctx, delay) {
-			break
+		if delay > 0 {
+			m.log.Printf("apply-pending: пауза %s", delay)
+			if !sleepCtx(ctx, delay) {
+				break
+			}
 		}
 	}
 	return sent, nil
