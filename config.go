@@ -43,6 +43,7 @@ type ApplyConfig struct {
 	SkipWithQuestions   bool   `json:"skip_with_questions"`
 	BaseURL             string `json:"base_url"`
 	Engine              string `json:"engine"`
+	ChromeDir           string `json:"chrome_dir"`
 }
 
 type Config struct {
@@ -109,6 +110,10 @@ func loadConfig(path string) (Config, error) {
 	}
 	if cfg.Apply.Engine == "" {
 		cfg.Apply.Engine = "browser"
+	}
+	if cfg.Apply.ChromeDir == "" {
+		home, _ := os.UserHomeDir()
+		cfg.Apply.ChromeDir = home + "/.hhmon-chrome"
 	}
 	if len(cfg.Searches) == 0 {
 		return cfg, fmt.Errorf("config: no searches defined")

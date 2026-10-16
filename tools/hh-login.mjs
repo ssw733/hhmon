@@ -1,80 +1,62 @@
-// Локальный логин на hh.ru через браузер (Playwright).
-// Пароль и коды подтверждения вводятся только в браузере — никуда не передаются.
+// Логин на hh.ru в постоянном профиле Chrome (Playwright).
+// Профиль сохраняется, поэтому отклики (tools/hh-apply.mjs) используют тот же
+// вход и повторный логин не нужен.
 //
-// Установка (один раз):
-//   npm i playwright
-//   npx playwright install chromium        # если нет системного Google Chrome
-//
-// Запуск:
-//   node tools/hh-login.mjs [session.json]
+// Установка: npm i playwright && npx playwright install chromium  (если нет Google Chrome)
+// Запуск:    node tools/hh-login.mjs [--dir ~/.hhmon-chrome]
 
 import { chromium } from 'playwright';
-import { writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-const out = process.argv[2] || 'session.json';
-
-const stealthArgs = [
-  '--disable-blink-features=AutomationControlled',
-  '--disable-features=IsolateOrigins,site-per-process',
-  '--start-maximized',
-];
-
-async function launch() {
-  // Сначала пробуем системный Google Chrome — hh режет встроенный Chromium.
-  try {
-    const b = await chromium.launch({ headless: false, channel: 'chrome', args: stealthArgs });
-    console.log('→ Запущен системный Google Chrome');
-    return b;
-  } catch (e) {
-    console.warn('→ Chrome не запустился (' + e.message.split('\n')[0] + '), использую встроенный Chromium');
-    return await chromium.launch({ headless: false, args: stealthArgs });
-  }
+function arg(name, def) {
+  const i = process.argv.indexOf(name);
+  return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : def;
 }
 
-const browser = await launch();
-const context = await browser.newContext({
-  locale: 'ru-RU',
-  timezoneId: 'Europe/Moscow',
-  viewport: null,
-});
-const page = await context.newPage();
+const dir = arg('--dir', process.env.HHMON_CHROME_DIR || path.join(os.homedir(), '.hhmon-chrome'));
+const stealthArgs = ['--disable-blink-features=AutomationControlled', '--start-maximized'];
 
-const UA =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-await context.addInitScript(() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-});
+let ctx;
+try {
+  ctx = await chromium.launchPersistentContext(dir, {
+    headless: false, channel: 'chrome', args: stealthArgs,
+    locale: 'ru-RU', timezoneId: 'Europe/Moscow', viewport: null,
+  });
+} catch (e) {
+  console.warn('Chrome не запустился (' + e.message.split('\n')[0] + '), беру встроенный Chromium');
+  ctx = await chromium.launchPersistentContext(dir, {
+    headless: false, args: stealthArgs, locale: 'ru-RU', viewport: null,
+  });
+}
+await ctx.addInitScript(() => Object.defineProperty(navigator, 'webdriver', { get: () => undefined }));
+const page = ctx.pages()[0] ?? (await ctx.newPage());
 
 let opened = false;
-for (let attempt = 1; attempt <= 3 && !opened; attempt++) {
+for (let a = 1; a <= 3 && !opened; a++) {
   try {
     await page.goto('https://hh.ru/account/login', { waitUntil: 'domcontentloaded', timeout: 60000 });
     opened = true;
   } catch (e) {
-    console.error(`Попытка ${attempt} открыть hh.ru не удалась: ${e.message.split('\n')[0]}`);
+    console.error(`Попытка ${a}: ${e.message.split('\n')[0]}`);
     await page.waitForTimeout(3000);
   }
 }
-
 if (!opened) {
-  console.error('\n✗ hh.ru не открылся. Что проверить:');
-  console.error('  • открывается ли hh.ru в твоём обычном браузере (если нет — сеть/VPN);');
-  console.error('  • если обычный Chrome открывает, а этот нет — закрой VPN/прокси или наоборот включи;');
-  console.error('  • возможно временная блокировка после нагрузки — подожди 10–30 мин.');
-  console.error('Окно оставлю открытым на 5 минут для диагностики...');
+  console.error('✗ hh.ru не открылся. Проверь сеть/VPN.');
   await page.waitForTimeout(5 * 60 * 1000);
-  await browser.close();
+  await ctx.close();
   process.exit(1);
 }
 
-console.log('→ Войди в аккаунт hh.ru в открывшемся окне (телефон/почта, код подтверждения).');
-console.log('→ Как войдёшь — сессия сохранится автоматически. Ждём до 5 минут...');
+console.log('→ Войди в аккаунт hh.ru (пароль/код). Профиль: ' + dir);
+console.log('→ Как войдёшь — скрипт сам завершится и запомнит сессию.');
 
 const deadline = Date.now() + 5 * 60 * 1000;
 let loggedIn = false;
 while (Date.now() < deadline) {
   const url = page.url();
-  const cookies = await context.cookies('https://hh.ru');
+  const cookies = await ctx.cookies('https://hh.ru');
   loggedIn =
     !url.includes('/account/login') ||
     cookies.some((c) => ['hhuid', 'hhrole', 'crypted_id', 'hh_sess_uid'].includes(c.name));
@@ -83,12 +65,9 @@ while (Date.now() < deadline) {
 }
 
 if (loggedIn) {
-  const state = await context.storageState({ path: out });
-  state.userAgent = await page.evaluate(() => navigator.userAgent).catch(() => UA);
-  writeFileSync(out, JSON.stringify(state, null, 2));
-  console.log('✓ Сессия сохранена: ' + out);
+  console.log('✓ Сессия сохранена в профиле: ' + dir);
 } else {
-  console.error('✗ Не дождался входа (таймаут). Попробуй снова.');
+  console.error('✗ Не дождался входа (таймаут).');
   process.exitCode = 1;
 }
-await browser.close();
+await ctx.close();

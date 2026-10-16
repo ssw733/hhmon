@@ -1,13 +1,14 @@
-// Отклик на вакансию hh.ru через реальный браузер (Playwright).
-// Использует session.json (created by tools/hh-login.mjs).
+// Отклик на вакансию hh.ru через постоянный профиль Chrome (Playwright).
+// Использует тот же профиль, что и tools/hh-login.mjs → залогинен без session.json.
 //
 // Запуск:
-//   node tools/hh-apply.mjs --id 138565634 --letter /tmp/letter.txt [--session session.json] [--dry]
-//
-// В конце печатает одну строку JSON: {"status":"submitted"} либо {"status":"failed","error":"..."}.
+//   node tools/hh-apply.mjs --id 138565634 --letter /tmp/letter.txt [--dir ~/.hhmon-chrome] [--dry]
+// Печатает JSON: {"status":"submitted"|"dry_run"|"failed", "error":"..."}
 
 import { chromium } from 'playwright';
 import { readFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 function arg(name, def) {
   const i = process.argv.indexOf(name);
@@ -19,7 +20,7 @@ function out(obj) {
 
 const id = arg('--id');
 const letterFile = arg('--letter');
-const session = arg('--session', 'session.json');
+const dir = arg('--dir', process.env.HHMON_CHROME_DIR || path.join(os.homedir(), '.hhmon-chrome'));
 const dry = process.argv.includes('--dry');
 
 if (!id || !letterFile) {
@@ -36,24 +37,19 @@ try {
 }
 
 const stealthArgs = ['--disable-blink-features=AutomationControlled', '--start-maximized'];
-
-let browser;
+let ctx;
 try {
-  browser = await chromium.launch({ headless: false, channel: 'chrome', args: stealthArgs });
+  ctx = await chromium.launchPersistentContext(dir, {
+    headless: false, channel: 'chrome', args: stealthArgs,
+    locale: 'ru-RU', timezoneId: 'Europe/Moscow', viewport: null,
+  });
 } catch {
-  browser = await chromium.launch({ headless: false, args: stealthArgs });
+  ctx = await chromium.launchPersistentContext(dir, {
+    headless: false, args: stealthArgs, locale: 'ru-RU', viewport: null,
+  });
 }
-
-const context = await browser.newContext({
-  storageState: session,
-  locale: 'ru-RU',
-  timezoneId: 'Europe/Moscow',
-  viewport: null,
-});
-await context.addInitScript(() => {
-  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-});
-const page = await context.newPage();
+await ctx.addInitScript(() => Object.defineProperty(navigator, 'webdriver', { get: () => undefined }));
+const page = ctx.pages()[0] ?? (await ctx.newPage());
 
 let status = 'failed';
 let error = '';
@@ -62,7 +58,7 @@ try {
   await page.goto(`https://hh.ru/vacancy/${id}`, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
   if (page.url().includes('/account/login')) {
-    error = 'сессия не авторизована (нужен логин)';
+    error = 'сессия не авторизована — запусти node tools/hh-login.mjs';
     throw new Error(error);
   }
 
@@ -80,7 +76,7 @@ try {
 
   if (dry) {
     out({ status: 'dry_run' });
-    await browser.close();
+    await ctx.close();
     process.exit(0);
   }
 
@@ -90,7 +86,6 @@ try {
   await submit.click({ timeout: 20000 });
   await page.waitForTimeout(4000);
 
-  // hh не всегда показывает явный текст; считаем успехом, если не появилось ошибки.
   const body = (await page.locator('body').innerText().catch(() => '')).slice(0, 8000);
   if (/что-то пошло не так|попробуйте позже|заполните обязательн|обязательн/i.test(body)) {
     error = 'hh вернул сообщение об ошибке/обязательных полях';
@@ -103,5 +98,5 @@ try {
 } finally {
   out(status === 'submitted' ? { status } : { status, error });
   await page.waitForTimeout(1000).catch(() => {});
-  await browser.close();
+  await ctx.close().catch(() => {});
 }

@@ -36,6 +36,9 @@ type resume struct {
 var resumeHashRe = regexp.MustCompile(`/resume/([0-9a-f]{40})`)
 
 func newApplier(cfg ApplyConfig, store *Store, gen Generator, profile string, logger *log.Logger) (*Applier, error) {
+	if strings.EqualFold(cfg.Engine, "browser") {
+		return &Applier{cfg: cfg, log: logger, gen: gen, profile: profile, store: store}, nil
+	}
 	client, ua, err := loadSession(cfg.SessionPath)
 	if err != nil {
 		return nil, err
@@ -227,7 +230,7 @@ func (a *Applier) applyBrowser(ctx context.Context, v Vacancy) (string, error) {
 	}
 	tmp.Close()
 
-	args := []string{"tools/hh-apply.mjs", "--id", v.ID, "--letter", tmp.Name(), "--session", a.cfg.SessionPath}
+	args := []string{"tools/hh-apply.mjs", "--id", v.ID, "--letter", tmp.Name(), "--dir", a.cfg.ChromeDir}
 	if a.cfg.DryRun {
 		args = append(args, "--dry")
 	}
