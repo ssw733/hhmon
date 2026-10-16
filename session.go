@@ -13,7 +13,8 @@ import (
 
 // playwrightState is the storageState file produced by `tools/hh-login.mjs`.
 type playwrightState struct {
-	Cookies []struct {
+	UserAgent string `json:"userAgent"`
+	Cookies   []struct {
 		Name     string  `json:"name"`
 		Value    string  `json:"value"`
 		Domain   string  `json:"domain"`
@@ -24,21 +25,21 @@ type playwrightState struct {
 	} `json:"cookies"`
 }
 
-func loadSession(path string) (*http.Client, error) {
+func loadSession(path string) (*http.Client, string, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read session %q: %w (сначала выполни: node tools/hh-login.mjs)", path, err)
+		return nil, "", fmt.Errorf("read session %q: %w (сначала выполни: node tools/hh-login.mjs)", path, err)
 	}
 	var st playwrightState
 	if err := json.Unmarshal(raw, &st); err != nil {
-		return nil, fmt.Errorf("parse session: %w", err)
+		return nil, "", fmt.Errorf("parse session: %w", err)
 	}
 	if len(st.Cookies) == 0 {
-		return nil, fmt.Errorf("session %q не содержит cookies", path)
+		return nil, "", fmt.Errorf("session %q не содержит cookies", path)
 	}
 	jar, err := cookiejar.New(nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	now := time.Now()
 	for _, c := range st.Cookies {
@@ -60,7 +61,7 @@ func loadSession(path string) (*http.Client, error) {
 		}
 		jar.SetCookies(u, []*http.Cookie{cookie})
 	}
-	return &http.Client{Jar: jar, Timeout: 30 * time.Second}, nil
+	return &http.Client{Jar: jar, Timeout: 30 * time.Second}, st.UserAgent, nil
 }
 
 func orDefault(v, def string) string {

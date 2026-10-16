@@ -17,6 +17,7 @@ import (
 type Applier struct {
 	cfg     ApplyConfig
 	client  *http.Client
+	ua      string
 	log     *log.Logger
 	gen     Generator
 	profile string
@@ -32,25 +33,34 @@ type resume struct {
 var resumeHashRe = regexp.MustCompile(`/resume/([0-9a-f]{40})`)
 
 func newApplier(cfg ApplyConfig, store *Store, gen Generator, profile string, logger *log.Logger) (*Applier, error) {
-	client, err := loadSession(cfg.SessionPath)
+	client, ua, err := loadSession(cfg.SessionPath)
 	if err != nil {
 		return nil, err
 	}
-	return &Applier{cfg: cfg, client: client, log: logger, gen: gen, profile: profile, store: store}, nil
+	return &Applier{cfg: cfg, client: client, ua: ua, log: logger, gen: gen, profile: profile, store: store}, nil
 }
 
 func (a *Applier) base() string { return strings.TrimRight(a.cfg.BaseURL, "/") }
+
+func (a *Applier) userAgent() string {
+	if a.ua != "" {
+		return a.ua
+	}
+	return browserUA
+}
 
 func (a *Applier) get(ctx context.Context, rawurl string, referer string) (*http.Response, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawurl, nil)
 	if err != nil {
 		return nil, nil, err
 	}
-	req.Header.Set("User-Agent", browserUA)
+	req.Header.Set("User-Agent", a.userAgent())
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
 	req.Header.Set("Accept-Language", "ru-RU,ru;q=0.9")
 	if referer != "" {
 		req.Header.Set("Referer", referer)
+	} else {
+		req.Header.Set("Referer", a.base()+"/")
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -71,7 +81,8 @@ func (a *Applier) resolveResume(ctx context.Context) (resume, error) {
 		return resume{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return resume{}, fmt.Errorf("resumes status %d (сессия жива? авторизован?)", resp.StatusCode)
+		return resume{}, fmt.Errorf("resumes status %d (сессия не принята — перезайди: node tools/hh-login.mjs). Ответ: %s",
+			resp.StatusCode, truncate(strings.TrimSpace(string(body)), 200))
 	}
 	a.resumes = parseResumes(body)
 	if len(a.resumes) == 0 {
@@ -179,7 +190,7 @@ func (a *Applier) submit(ctx context.Context, action string, vals url.Values, re
 	if err != nil {
 		return "failed", err
 	}
-	req.Header.Set("User-Agent", browserUA)
+	req.Header.Set("User-Agent", a.userAgent())
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json, text/html, */*")
 	req.Header.Set("Accept-Language", "ru-RU,ru;q=0.9")

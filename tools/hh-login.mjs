@@ -36,7 +36,10 @@ while (Date.now() < deadline) {
 }
 
 if (ok) {
-  await context.storageState({ path: out });
+  const state = await context.storageState({ path: out });
+  state.userAgent = await page.evaluate(() => navigator.userAgent);
+  const { writeFileSync } = await import('node:fs');
+  writeFileSync(out, JSON.stringify(state, null, 2));
   console.log('✓ Сессия сохранена: ' + out);
 } else {
   console.error('✗ Не дождался входа (таймаут). Попробуй снова.');
