@@ -8,10 +8,18 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
 )
+
+func resolveKey(k string) string {
+	if strings.HasPrefix(k, "env:") {
+		return os.Getenv(strings.TrimPrefix(k, "env:"))
+	}
+	return k
+}
 
 type Generator interface {
 	Generate(ctx context.Context, system, user string) (string, error)
@@ -24,7 +32,8 @@ func newGenerator(cfg LLMConfig) (Generator, error) {
 		return &ollamaGen{client: client, cfg: cfg}, nil
 	case "gemini":
 		return &geminiGen{client: client, cfg: cfg}, nil
-	case "openai", "groq", "openrouter", "deepseek", "opencode":
+	case "openai", "groq", "openrouter", "deepseek", "opencode",
+		"cerebras", "mistral", "nvidia", "together", "xai", "fireworks":
 		return &openaiGen{client: client, cfg: cfg}, nil
 	default:
 		return nil, fmt.Errorf("unknown llm provider %q", cfg.Provider)
@@ -289,6 +298,18 @@ func (g *openaiGen) Generate(ctx context.Context, system, user string) (string, 
 			base = "https://api.deepseek.com"
 		case "opencode":
 			base = "https://opencode.ai/inference/openai/v1"
+		case "cerebras":
+			base = "https://api.cerebras.ai/v1"
+		case "mistral":
+			base = "https://api.mistral.ai/v1"
+		case "nvidia":
+			base = "https://integrate.api.nvidia.com/v1"
+		case "together":
+			base = "https://api.together.xyz/v1"
+		case "xai":
+			base = "https://api.x.ai/v1"
+		case "fireworks":
+			base = "https://api.fireworks.ai/inference/v1"
 		default:
 			base = "https://api.openai.com/v1"
 		}
@@ -306,7 +327,7 @@ func (g *openaiGen) Generate(ctx context.Context, system, user string) (string, 
 			{"role": "user", "content": user},
 		},
 	}
-	headers := map[string]string{"Authorization": "Bearer " + g.cfg.APIKey}
+	headers := map[string]string{"Authorization": "Bearer " + resolveKey(g.cfg.APIKey)}
 	body, err := postJSON(ctx, g.client, strings.TrimRight(base, "/")+"/chat/completions", headers, payload)
 	if err != nil {
 		return "", err
