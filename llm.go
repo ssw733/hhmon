@@ -3,11 +3,15 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -32,9 +36,11 @@ func newGenerator(cfg LLMConfig) (Generator, error) {
 		return &ollamaGen{client: client, cfg: cfg}, nil
 	case "gemini":
 		return &geminiGen{client: client, cfg: cfg}, nil
-	case "openai", "groq", "openrouter", "deepseek", "opencode",
+	case "openai", "groq", "openrouter", "deepseek", "opencode", "yandex",
 		"cerebras", "mistral", "nvidia", "together", "xai", "fireworks":
 		return &openaiGen{client: client, cfg: cfg}, nil
+	case "gigachat":
+		return &gigachatGen{client: gigachatClient(), cfg: cfg}, nil
 	default:
 		return nil, fmt.Errorf("unknown llm provider %q", cfg.Provider)
 	}
@@ -145,6 +151,10 @@ func newChainGenerator(cfgs []LLMConfig, logger *log.Logger) (Generator, error) 
 	}
 	c := &chainGen{log: logger}
 	for _, cfg := range cfgs {
+		if !strings.EqualFold(cfg.Provider, "ollama") && resolveKey(cfg.APIKey) == "" {
+			logger.Printf("LLM: %s/%s пропущен — не задан api_key (используй \"env:VAR\")", cfg.Provider, cfg.Model)
+			continue
+		}
 		g, err := newGenerator(cfg)
 		if err != nil {
 			return nil, err
@@ -155,6 +165,9 @@ func newChainGenerator(cfgs []LLMConfig, logger *log.Logger) (Generator, error) 
 		}
 		c.entries = append(c.entries, chainEntry{name: name, gen: g})
 	}
+	if len(c.entries) == 0 {
+		logger.Printf("LLM: ни один провайдер не настроен (нет api_key) — мониторинг будет без писем")
+	}
 	return c, nil
 }
 
@@ -164,6 +177,9 @@ func (c *chainGen) Generate(ctx context.Context, system, user string) (string, e
 	c.mu.Unlock()
 
 	n := len(c.entries)
+	if n == 0 {
+		return "", fmt.Errorf("нет настроенных LLM: задай api_key (например \"env:OPENROUTER_API_KEY\") или подними Ollama")
+	}
 	var lastErr error
 	for i := 0; i < n; i++ {
 		if ctx.Err() != nil {
@@ -310,6 +326,8 @@ func (g *openaiGen) Generate(ctx context.Context, system, user string) (string, 
 			base = "https://api.x.ai/v1"
 		case "fireworks":
 			base = "https://api.fireworks.ai/inference/v1"
+		case "yandex":
+			base = "https://llm.api.cloud.yandex.net/v1"
 		default:
 			base = "https://api.openai.com/v1"
 		}
@@ -327,7 +345,11 @@ func (g *openaiGen) Generate(ctx context.Context, system, user string) (string, 
 			{"role": "user", "content": user},
 		},
 	}
-	headers := map[string]string{"Authorization": "Bearer " + resolveKey(g.cfg.APIKey)}
+	auth := "Bearer " + resolveKey(g.cfg.APIKey)
+	if strings.EqualFold(g.cfg.Provider, "yandex") {
+		auth = "Api-Key " + resolveKey(g.cfg.APIKey)
+	}
+	headers := map[string]string{"Authorization": auth}
 	body, err := postJSON(ctx, g.client, strings.TrimRight(base, "/")+"/chat/completions", headers, payload)
 	if err != nil {
 		return "", err
@@ -346,4 +368,135 @@ func (g *openaiGen) Generate(ctx context.Context, system, user string) (string, 
 		return "", fmt.Errorf("openai-compatible: empty response")
 	}
 	return strings.TrimSpace(out.Choices[0].Message.Content), nil
+}
+
+// ---- GigaChat (Sber) ----
+
+func gigachatClient() *http.Client {
+	tlsCfg := &tls.Config{}
+	if ca := os.Getenv("GIGACHAT_CA"); ca != "" {
+		if pem, err := os.ReadFile(ca); err == nil {
+			pool := x509.NewCertPool()
+			pool.AppendCertsFromPEM(pem)
+			tlsCfg.RootCAs = pool
+		}
+	}
+	if tlsCfg.RootCAs == nil {
+		// Российский Trusted Root CA отсутствует в стандартном хранилище Go.
+		tlsCfg.InsecureSkipVerify = true //nolint:gosec
+	}
+	return &http.Client{Transport: &http.Transport{TLSClientConfig: tlsCfg}}
+}
+
+type gigachatGen struct {
+	client *http.Client
+	cfg    LLMConfig
+	mu     sync.Mutex
+	token  string
+	exp    time.Time
+}
+
+func (g *gigachatGen) accessToken(ctx context.Context) (string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.token != "" && time.Now().Before(g.exp.Add(-time.Minute)) {
+		return g.token, nil
+	}
+	authURL := os.Getenv("GIGACHAT_OAUTH_URL")
+	if authURL == "" {
+		authURL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+	}
+	scope := os.Getenv("GIGACHAT_SCOPE")
+	if scope == "" {
+		scope = "GIGACHAT_API_PERS"
+	}
+	form := url.Values{"scope": {scope}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, authURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("RqUID", uuid4())
+	req.Header.Set("Authorization", "Basic "+resolveKey(g.cfg.APIKey))
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("gigachat oauth %d: %s", resp.StatusCode, truncate(string(body), 300))
+	}
+	var out struct {
+		AccessToken string `json:"access_token"`
+		ExpiresAt   int64  `json:"expires_at"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", err
+	}
+	if out.AccessToken == "" {
+		return "", fmt.Errorf("gigachat: пустой access_token")
+	}
+	g.token = out.AccessToken
+	if out.ExpiresAt > 0 {
+		g.exp = time.UnixMilli(out.ExpiresAt)
+	} else {
+		g.exp = time.Now().Add(25 * time.Minute)
+	}
+	return g.token, nil
+}
+
+func (g *gigachatGen) Generate(ctx context.Context, system, user string) (string, error) {
+	tok, err := g.accessToken(ctx)
+	if err != nil {
+		return "", err
+	}
+	base := g.cfg.BaseURL
+	if base == "" {
+		base = "https://gigachat.devices.sberbank.ru/api/v1"
+	}
+	model := g.cfg.Model
+	if model == "" {
+		model = "GigaChat"
+	}
+	payload := map[string]any{
+		"model": model,
+		"messages": []map[string]string{
+			{"role": "system", "content": system},
+			{"role": "user", "content": user},
+		},
+		"temperature": g.cfg.Temperature,
+	}
+	if g.cfg.MaxTokens > 0 {
+		payload["max_tokens"] = g.cfg.MaxTokens
+	}
+	headers := map[string]string{"Authorization": "Bearer " + tok}
+	body, err := postJSON(ctx, g.client, strings.TrimRight(base, "/")+"/chat/completions", headers, payload)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return "", err
+	}
+	if len(out.Choices) == 0 {
+		return "", fmt.Errorf("gigachat: empty response")
+	}
+	return strings.TrimSpace(out.Choices[0].Message.Content), nil
+}
+
+func uuid4() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
