@@ -1,0 +1,28 @@
+{
+  "poll_interval_seconds": 20,
+  "request_jitter_ms": 800,
+  "llm_timeout_seconds": 120,
+  "seed_on_first_run": true,
+  "db_path": "hhmon.db",
+  "log_path": "hhmon.log",
+
+  "llm": {
+    "provider": "opencode",
+    "model": "deepseek-v4.1-flash-free",
+    "base_url": "",
+    "api_key": "ВСТАВЬ_OPENCODE_API_KEY",
+    "temperature": 0.6,
+    "max_tokens": 1200
+  },
+
+  "searches": [
+    {
+      "name": "Go backend",
+      "query": "golang",
+      "areas": [1, 2],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер"],
+      "profile_path": "profiles/go.md"
+    }
+  ]
+}

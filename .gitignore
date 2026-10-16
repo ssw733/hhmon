@@ -1,0 +1,5 @@
+hhmon.db
+hhmon.log
+*.db
+*.log
+/hhmon

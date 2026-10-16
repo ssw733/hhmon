@@ -1,0 +1,91 @@
+{
+  "poll_interval_seconds": 25,
+  "request_jitter_ms": 800,
+  "llm_timeout_seconds": 240,
+  "seed_on_first_run": true,
+  "db_path": "hhmon.db",
+  "log_path": "hhmon.log",
+
+  "llm": {
+    "provider": "ollama",
+    "model": "gemma4:31b-cloud",
+    "base_url": "http://localhost:11434",
+    "temperature": 0.6,
+    "max_tokens": 1200
+  },
+
+  "llm_chain": [
+    { "provider": "deepseek", "model": "deepseek-chat", "api_key": "" },
+    { "provider": "groq", "model": "llama-3.3-70b-versatile", "api_key": "" },
+    { "provider": "gemini", "model": "gemini-2.0-flash", "api_key": "" },
+    { "provider": "ollama", "model": "gemma4:31b-cloud", "base_url": "http://localhost:11434" },
+    { "provider": "ollama", "model": "qwen2.5:14b", "base_url": "http://localhost:11434" }
+  ],
+
+  "searches": [
+    {
+      "name": "Go backend",
+      "query": "golang",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/go.md"]
+    },
+    {
+      "name": "PHP backend",
+      "query": "php разработчик",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/php.md"]
+    },
+    {
+      "name": "Blockchain / Crypto",
+      "query": "blockchain",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/blockchain.md"]
+    },
+    {
+      "name": "Backend / highload",
+      "query": "backend разработчик",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/highload.md"]
+    },
+    {
+      "name": "ML-инженер",
+      "query": "machine learning",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/ml.md"]
+    },
+    {
+      "name": "Data Science",
+      "query": "data science",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/data.md"]
+    },
+    {
+      "name": "Аналитик данных",
+      "query": "аналитик данных",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/data.md"]
+    },
+    {
+      "name": "Embedded",
+      "query": "embedded разработчик",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/embedded.md"]
+    }
+  ]
+}
