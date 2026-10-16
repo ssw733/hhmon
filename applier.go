@@ -120,10 +120,6 @@ func parseResumes(body []byte) []resume {
 
 // Apply performs a real (or dry-run) response to a vacancy.
 func (a *Applier) Apply(ctx context.Context, v Vacancy) (string, error) {
-	if !a.cfg.Enabled {
-		return "disabled", nil
-	}
-
 	res, err := a.resolveResume(ctx)
 	if err != nil {
 		return "failed", err

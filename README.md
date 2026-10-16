@@ -34,6 +34,8 @@ go build -o hhmon .
 ./hhmon -config config.json -web       # + локальный веб-интерфейс (127.0.0.1:8080)
 ./hhmon -config config.json -web -addr 127.0.0.1:9000   # свой адрес
 ./hhmon -config config.json -export preview.html        # статичный снапшот UI в файл
+./hhmon -config config.json -apply 138561178            # откликнуться на вакансию из базы
+./hhmon -config config.json -apply-pending              # откликнуться на все сохранённые (с письмами)
 ```
 
 Останов — `Ctrl+C` (graceful shutdown).
@@ -197,6 +199,13 @@ HTML со вшитыми данными (в репозитории лежит п
 Логика отклика: GET формы `/applicant/vacancy_response?vacancyId=…` → парсинг полей →
 подстановка резюме, письма и LLM-ответов на вопросы → POST с заголовком `X-Xsrftoken`.
 В `dry_run` в лог пишется итоговый payload, но запрос не отправляется.
+
+Отклик можно запускать точечно, без ожидания мониторинга:
+`./hhmon -config config.json -apply <vacancyId>` (вакансия должна быть в базе)
+или `./hhmon -config config.json -apply-pending` — откликнуться на всё сохранённое.
+
+> По умолчанию `llm_chain` содержит только бесплатные модели (Ollama локально/облако),
+> чтобы не тратить квоты платных API. Добавляй платные провайдеры в цепочку только если готов платить.
 
 ## Как это помогает «залететь первым»
 

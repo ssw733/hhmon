@@ -47,6 +47,8 @@ func main() {
 	web := flag.Bool("web", false, "serve a local web UI")
 	addr := flag.String("addr", "127.0.0.1:8080", "web UI listen address")
 	exportPath := flag.String("export", "", "export a static HTML snapshot of the UI to this file and exit")
+	applyID := flag.String("apply", "", "откликнуться на сохранённую вакансию по ID и выйти")
+	applyPending := flag.Bool("apply-pending", false, "откликнуться на все сохранённые вакансии с письмами и выйти")
 	flag.Parse()
 
 	cfg, err := loadConfig(*configPath)
@@ -89,14 +91,16 @@ func main() {
 	}
 
 	var applier *Applier
-	if cfg.Apply.Enabled {
+	if cfg.Apply.Enabled || *applyID != "" || *applyPending {
 		ap, err := newApplier(cfg.Apply, store, runs[0].gen, runs[0].profile, logger)
 		if err != nil {
 			logger.Fatalf("apply: %v", err)
 		}
 		applier = ap
-		logger.Printf("apply: включён (dry_run=%v, resume~%q, max/день=%d, пауза=%ds)",
-			cfg.Apply.DryRun, cfg.Apply.ResumeTitleContains, cfg.Apply.MaxPerDay, cfg.Apply.MinDelaySeconds)
+		if cfg.Apply.Enabled {
+			logger.Printf("apply: включён (dry_run=%v, resume~%q, max/день=%d, пауза=%ds)",
+				cfg.Apply.DryRun, cfg.Apply.ResumeTitleContains, cfg.Apply.MaxPerDay, cfg.Apply.MinDelaySeconds)
+		}
 	}
 
 	m := &Monitor{
@@ -118,6 +122,25 @@ func main() {
 			logger.Fatalf("export: %v", err)
 		}
 		logger.Printf("preview exported: %s", *exportPath)
+		return
+	}
+
+	if *applyID != "" {
+		v, err := store.Get(*applyID)
+		if err != nil {
+			logger.Fatalf("apply: вакансия %s не найдена в базе (сначала прогони мониторинг): %v", *applyID, err)
+		}
+		if err := m.applyVacancy(ctx, v); err != nil {
+			logger.Fatalf("apply: %v", err)
+		}
+		return
+	}
+	if *applyPending {
+		n, err := m.applyPending(ctx)
+		if err != nil {
+			logger.Fatalf("apply-pending: %v", err)
+		}
+		logger.Printf("apply-pending: отправлено %d", n)
 		return
 	}
 
@@ -299,6 +322,9 @@ func (m *Monitor) handle(ctx context.Context, run searchRun, it RSSItem) error {
 }
 
 func (m *Monitor) maybeApply(ctx context.Context, v Vacancy) {
+	if !m.cfg.Apply.Enabled {
+		return
+	}
 	applied, err := m.store.HasApplied(v.ID)
 	if err != nil {
 		m.log.Printf("  apply: db error %v", err)
@@ -319,14 +345,56 @@ func (m *Monitor) maybeApply(ctx context.Context, v Vacancy) {
 			return
 		}
 	}
+	if err := m.applyVacancy(ctx, v); err != nil {
+		m.log.Printf("  apply %s: ОШИБКА %v", v.ID, err)
+	}
+}
+
+// applyVacancy generates a letter if missing, then performs the response.
+func (m *Monitor) applyVacancy(ctx context.Context, v Vacancy) error {
+	if v.CoverLetter == "" {
+		system, user := buildPrompt(m.searches[0].profile, v)
+		letter, err := m.searches[0].gen.Generate(ctx, system, user)
+		if err != nil {
+			return fmt.Errorf("сгенерировать письмо: %w", err)
+		}
+		v.CoverLetter = letter
+		_ = m.store.Save(v)
+	}
 	status, err := m.applier.Apply(ctx, v)
 	if err != nil {
-		m.log.Printf("  apply %s: ОШИБКА %v", v.ID, err)
 		_ = m.store.RecordApplication(v.ID, "", "failed", v.CoverLetter, err.Error())
-		return
+		return err
 	}
 	_ = m.store.RecordApplication(v.ID, "", status, v.CoverLetter, "")
-	m.log.Printf("  apply %s: %s", v.ID, status)
+	m.log.Printf("apply %s: %s", v.ID, status)
+	return nil
+}
+
+func (m *Monitor) applyPending(ctx context.Context) (int, error) {
+	vs, err := m.store.Recent(1000)
+	if err != nil {
+		return 0, err
+	}
+	sent := 0
+	for _, v := range vs {
+		if v.CoverLetter == "" {
+			continue
+		}
+		if applied, _ := m.store.HasApplied(v.ID); applied {
+			continue
+		}
+		if err := m.applyVacancy(ctx, v); err != nil {
+			m.log.Printf("apply %s: ОШИБКА %v", v.ID, err)
+			continue
+		}
+		sent++
+		if m.cfg.Apply.MaxPerDay > 0 && sent >= m.cfg.Apply.MaxPerDay {
+			m.log.Printf("apply-pending: достигнут лимит за прогон (%d)", m.cfg.Apply.MaxPerDay)
+			break
+		}
+	}
+	return sent, nil
 }
 
 func (m *Monitor) jitter() {

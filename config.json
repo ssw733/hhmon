@@ -15,11 +15,8 @@
   },
 
   "llm_chain": [
-    { "provider": "deepseek", "model": "deepseek-chat", "api_key": "" },
-    { "provider": "groq", "model": "llama-3.3-70b-versatile", "api_key": "" },
-    { "provider": "gemini", "model": "gemini-2.0-flash", "api_key": "" },
     { "provider": "ollama", "model": "gemma4:31b-cloud", "base_url": "http://localhost:11434" },
-    { "provider": "ollama", "model": "qwen2.5:14b", "base_url": "http://localhost:11434" }
+    { "provider": "ollama", "model": "gemma4:latest", "base_url": "http://localhost:11434" }
   ],
 
   "apply": {
