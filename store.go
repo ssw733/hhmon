@@ -144,7 +144,7 @@ func (s *Store) PendingApplications(limit int) ([]Vacancy, error) {
 	rows, err := s.db.Query(
 		`SELECT id, title, company, url, region, salary, description, cover_letter, found_at, published_at
 		 FROM vacancies
-		 WHERE cover_letter <> '' AND id NOT IN (SELECT vacancy_id FROM applications)
+		 WHERE id NOT IN (SELECT vacancy_id FROM applications)
 		 ORDER BY found_at ASC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err

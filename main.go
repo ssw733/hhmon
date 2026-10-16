@@ -308,15 +308,19 @@ func (m *Monitor) handle(ctx context.Context, run searchRun, it RSSItem) error {
 			Region: it.Region, Salary: it.Salary, FoundAt: time.Now(), PublishedAt: it.PublishedAt}
 	}
 
-	system, user := buildPrompt(run.profile, v)
-	genCtx, cancel := context.WithTimeout(ctx, time.Duration(m.cfg.LLMTimeoutSec)*time.Second)
-	letter, err := run.gen.Generate(genCtx, system, user)
-	cancel()
-	if err != nil {
-		m.log.Printf("  llm error: %v", err)
-	} else {
-		v.CoverLetter = letter
-		m.log.Printf("  --- сопроводительное [%s] ---\n%s\n  -----------------------------", run.name, letter)
+	// Если автоотклик включён — письмо сгенерируем в момент отклика (экономим лимиты LLM).
+	// Если выключен (только мониторинг) — сгенерируем сразу, чтобы можно было прочитать.
+	if !m.cfg.Apply.Enabled {
+		system, user := buildPrompt(run.profile, v)
+		genCtx, cancel := context.WithTimeout(ctx, time.Duration(m.cfg.LLMTimeoutSec)*time.Second)
+		letter, lerr := run.gen.Generate(genCtx, system, user)
+		cancel()
+		if lerr != nil {
+			m.log.Printf("  llm error: %v", lerr)
+		} else {
+			v.CoverLetter = letter
+			m.log.Printf("  --- сопроводительное [%s] ---\n%s\n  -----------------------------", run.name, letter)
+		}
 	}
 
 	if err := m.store.Save(v); err != nil {
