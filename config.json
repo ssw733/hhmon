@@ -23,7 +23,7 @@
     "enabled": false,
     "dry_run": true,
     "max_per_day": 20,
-    "min_delay_seconds": 120,
+    "min_delay_seconds": 30,
     "session_path": "session.json",
     "resume_title_contains": "backend",
     "questions_via_llm": true,

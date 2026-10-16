@@ -132,6 +132,39 @@ func (s *Store) AppliedSince(t time.Time) (int, error) {
 	return n, err
 }
 
+func (s *Store) SubmittedSince(t time.Time) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(1) FROM applications WHERE status='submitted' AND applied_at >= ?`,
+		t.Format(time.RFC3339)).Scan(&n)
+	return n, err
+}
+
+// PendingApplications returns vacancies with a letter that are not applied yet.
+func (s *Store) PendingApplications(limit int) ([]Vacancy, error) {
+	rows, err := s.db.Query(
+		`SELECT id, title, company, url, region, salary, description, cover_letter, found_at, published_at
+		 FROM vacancies
+		 WHERE cover_letter <> '' AND id NOT IN (SELECT vacancy_id FROM applications)
+		 ORDER BY found_at ASC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Vacancy
+	for rows.Next() {
+		var v Vacancy
+		var foundAt, publishedAt string
+		if err := rows.Scan(&v.ID, &v.Title, &v.Company, &v.URL, &v.Region, &v.Salary,
+			&v.Description, &v.CoverLetter, &foundAt, &publishedAt); err != nil {
+			return nil, err
+		}
+		v.FoundAt, _ = time.Parse(time.RFC3339, foundAt)
+		v.PublishedAt, _ = time.Parse(time.RFC3339, publishedAt)
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) LastAppliedAt() (time.Time, error) {
 	var raw string
 	err := s.db.QueryRow(`SELECT applied_at FROM applications ORDER BY applied_at DESC LIMIT 1`).Scan(&raw)

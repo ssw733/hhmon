@@ -144,6 +144,10 @@ func main() {
 		return
 	}
 
+	if cfg.Apply.Enabled && !*once {
+		m.startApplyWorker(ctx)
+	}
+
 	total, _ := store.Count()
 	logger.Printf("=== hhmon started === searches=%d interval=%ds db_vacancies=%d",
 		len(runs), cfg.PollIntervalSec, total)
@@ -314,39 +318,68 @@ func (m *Monitor) handle(ctx context.Context, run searchRun, it RSSItem) error {
 		return err
 	}
 	m.log.Printf("  saved. url=%s", it.URL)
-
-	if m.applier != nil && v.CoverLetter != "" {
-		m.maybeApply(ctx, v)
-	}
 	return nil
 }
 
-func (m *Monitor) maybeApply(ctx context.Context, v Vacancy) {
-	if !m.cfg.Apply.Enabled {
-		return
-	}
-	applied, err := m.store.HasApplied(v.ID)
+func (m *Monitor) nextPending() (Vacancy, bool) {
+	vs, err := m.store.PendingApplications(1)
 	if err != nil {
-		m.log.Printf("  apply: db error %v", err)
-		return
+		m.log.Printf("apply-worker: db error %v", err)
+		return Vacancy{}, false
 	}
-	if applied {
-		return
+	if len(vs) == 0 {
+		return Vacancy{}, false
 	}
+	return vs[0], true
+}
+
+func (m *Monitor) dailyLimitReached() bool {
 	now := time.Now()
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	if cnt, err := m.store.AppliedSince(startOfDay); err == nil && cnt >= m.cfg.Apply.MaxPerDay {
-		m.log.Printf("  apply %s: дневной лимит %d достигнут — пропуск", v.ID, m.cfg.Apply.MaxPerDay)
-		return
+	cnt, err := m.store.SubmittedSince(startOfDay)
+	if err != nil {
+		return false
 	}
-	if last, err := m.store.LastAppliedAt(); err == nil {
-		if wait := time.Duration(m.cfg.Apply.MinDelaySeconds)*time.Second - time.Since(last); wait > 0 {
-			m.log.Printf("  apply %s: пауза между откликами, пропуск (подождать %s)", v.ID, wait.Round(time.Second))
-			return
+	return cnt >= m.cfg.Apply.MaxPerDay
+}
+
+// startApplyWorker applies to the oldest pending vacancy every
+// min_delay_seconds, respecting the daily cap.
+func (m *Monitor) startApplyWorker(ctx context.Context) {
+	delay := time.Duration(m.cfg.Apply.MinDelaySeconds) * time.Second
+	go func() {
+		m.log.Printf("apply-worker: запущен, интервал %s, лимит %d/день", delay, m.cfg.Apply.MaxPerDay)
+		for ctx.Err() == nil {
+			if m.dailyLimitReached() {
+				m.log.Printf("apply-worker: дневной лимит %d достигнут — пауза 10 мин", m.cfg.Apply.MaxPerDay)
+				if !sleepCtx(ctx, 10*time.Minute) {
+					return
+				}
+				continue
+			}
+			v, ok := m.nextPending()
+			if !ok {
+				if !sleepCtx(ctx, 10*time.Second) {
+					return
+				}
+				continue
+			}
+			if err := m.applyVacancy(ctx, v); err != nil {
+				m.log.Printf("apply-worker: %s ОШИБКА %v", v.ID, err)
+			}
+			if !sleepCtx(ctx, delay) {
+				return
+			}
 		}
-	}
-	if err := m.applyVacancy(ctx, v); err != nil {
-		m.log.Printf("  apply %s: ОШИБКА %v", v.ID, err)
+	}()
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
 	}
 }
 
@@ -372,25 +405,23 @@ func (m *Monitor) applyVacancy(ctx context.Context, v Vacancy) error {
 }
 
 func (m *Monitor) applyPending(ctx context.Context) (int, error) {
-	vs, err := m.store.Recent(1000)
-	if err != nil {
-		return 0, err
-	}
+	delay := time.Duration(m.cfg.Apply.MinDelaySeconds) * time.Second
 	sent := 0
-	for _, v := range vs {
-		if v.CoverLetter == "" {
-			continue
+	for ctx.Err() == nil {
+		if m.cfg.Apply.MaxPerDay > 0 && sent >= m.cfg.Apply.MaxPerDay {
+			m.log.Printf("apply-pending: достигнут лимит за прогон (%d)", m.cfg.Apply.MaxPerDay)
+			break
 		}
-		if applied, _ := m.store.HasApplied(v.ID); applied {
-			continue
+		v, ok := m.nextPending()
+		if !ok {
+			break
 		}
 		if err := m.applyVacancy(ctx, v); err != nil {
 			m.log.Printf("apply %s: ОШИБКА %v", v.ID, err)
-			continue
+		} else {
+			sent++
 		}
-		sent++
-		if m.cfg.Apply.MaxPerDay > 0 && sent >= m.cfg.Apply.MaxPerDay {
-			m.log.Printf("apply-pending: достигнут лимит за прогон (%d)", m.cfg.Apply.MaxPerDay)
+		if delay > 0 && !sleepCtx(ctx, delay) {
 			break
 		}
 	}
