@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -51,6 +52,8 @@ func main() {
 	applyPending := flag.Bool("apply-pending", false, "откликнуться на все сохранённые вакансии с письмами и выйти")
 	flag.Parse()
 
+	loadDotEnv(".env")
+
 	cfg, err := loadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("config: %v", err)
@@ -75,6 +78,7 @@ func main() {
 
 	client := newHTTPClient(30 * time.Second)
 
+	genCache := map[string]Generator{}
 	runs := make([]searchRun, 0, len(cfg.Searches))
 	for i := range cfg.Searches {
 		s := cfg.Searches[i]
@@ -82,7 +86,7 @@ func main() {
 		if err != nil {
 			logger.Fatalf("search %q profile: %v", s.Name, err)
 		}
-		gen, err := buildGenerator(s, cfg, logger)
+		gen, err := cachedGenerator(genCache, s, cfg, logger)
 		if err != nil {
 			logger.Fatalf("search %q llm: %v", s.Name, err)
 		}
@@ -468,6 +472,28 @@ func buildGenerator(s Search, cfg Config, logger *log.Logger) (Generator, error)
 	return newGenerator(mergeLLM(cfg.LLM, s.LLM))
 }
 
+// cachedGenerator builds each unique LLM chain once and reuses it,
+// so startup logs are not duplicated per search.
+func cachedGenerator(cache map[string]Generator, s Search, cfg Config, logger *log.Logger) (Generator, error) {
+	var key string
+	if chain := chainFor(s, cfg); len(chain) > 0 {
+		b, _ := json.Marshal(chain)
+		key = "chain:" + string(b)
+	} else {
+		b, _ := json.Marshal(mergeLLM(cfg.LLM, s.LLM))
+		key = "single:" + string(b)
+	}
+	if g, ok := cache[key]; ok {
+		return g, nil
+	}
+	g, err := buildGenerator(s, cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+	cache[key] = g
+	return g, nil
+}
+
 func describeLLM(s Search, cfg Config) string {
 	if chain := chainFor(s, cfg); len(chain) > 0 {
 		names := make([]string, len(chain))
@@ -497,7 +523,6 @@ func resolveProfile(s Search) (string, error) {
 	}
 	return loadProfile(s.ProfilePath)
 }
-
 func setupLogger(path string) (*log.Logger, *lineBuffer, func(), error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
@@ -506,6 +531,31 @@ func setupLogger(path string) (*log.Logger, *lineBuffer, func(), error) {
 	buf := newLineBuffer(1000)
 	logger := log.New(io.MultiWriter(os.Stdout, f, buf), "", log.LstdFlags)
 	return logger, buf, func() { f.Close() }, nil
+}
+
+// loadDotEnv reads simple KEY=VALUE lines from a .env file (if present)
+// and sets them as environment variables (without overriding existing ones),
+// so API keys can live in .env instead of config.json.
+func loadDotEnv(path string) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		v = strings.Trim(strings.TrimSpace(v), `"'`)
+		if k != "" && os.Getenv(k) == "" {
+			os.Setenv(k, v)
+		}
+	}
 }
 
 func printRecent(store *Store, logger *log.Logger, n int) {

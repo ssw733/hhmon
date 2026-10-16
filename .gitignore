@@ -4,5 +4,6 @@ hhmon.log
 *.log
 /hhmon
 session.json
+.env
 node_modules
 playwright-report
