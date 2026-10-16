@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -30,6 +31,10 @@ type Monitor struct {
 	searches    []searchRun
 	log         *log.Logger
 	seenThisRun map[string]bool
+	mu          sync.Mutex
+	statusMu    sync.Mutex
+	lastRun     time.Time
+	lastNew     int
 }
 
 func main() {
@@ -38,6 +43,8 @@ func main() {
 	seedOnly := flag.Bool("seed", false, "only record current feed without generating letters")
 	limit := flag.Int("limit", 0, "max new vacancies to process per cycle (0 = unlimited)")
 	listN := flag.Int("list", 0, "print the N most recent saved vacancies (with cover letters) and exit")
+	web := flag.Bool("web", false, "serve a local web UI")
+	addr := flag.String("addr", "127.0.0.1:8080", "web UI listen address")
 	flag.Parse()
 
 	cfg, err := loadConfig(*configPath)
@@ -45,7 +52,7 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	logger, closeLog, err := setupLogger(cfg.LogPath)
+	logger, logBuf, closeLog, err := setupLogger(cfg.LogPath)
 	if err != nil {
 		log.Fatalf("logger: %v", err)
 	}
@@ -101,24 +108,89 @@ func main() {
 		seed = true
 	}
 
+	if *web {
+		startWeb(*addr, cfg, store, m, logBuf, logger)
+		logger.Printf("web UI: http://%s", webDisplayAddr(*addr))
+		if *once {
+			m.Run(ctx, seed, *limit, true)
+			return
+		}
+		go m.Run(ctx, seed, *limit, false)
+		<-ctx.Done()
+		logger.Printf("shutting down")
+		return
+	}
+
+	m.Run(ctx, seed, *limit, *once)
+}
+
+func startWeb(addr string, cfg Config, store *Store, m *Monitor, buf *lineBuffer, logger *log.Logger) {
+	srv := &webServer{cfg: cfg, store: store, mon: m, buf: buf}
+	httpSrv := &http.Server{Addr: addr, Handler: srv.routes()}
+	go func() {
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Printf("web server error: %v", err)
+		}
+	}()
+}
+
+func webDisplayAddr(addr string) string {
+	if strings.HasPrefix(addr, ":") {
+		return "127.0.0.1" + addr
+	}
+	return addr
+}
+
+func (m *Monitor) Run(ctx context.Context, seed bool, limit int, once bool) {
 	for {
-		newCount, err := m.cycle(ctx, seed, *limit)
+		m.mu.Lock()
+		newCount, err := m.cycle(ctx, seed, limit)
+		m.setStatus(newCount)
+		m.mu.Unlock()
 		if err != nil {
-			logger.Printf("cycle error: %v", err)
+			m.log.Printf("cycle error: %v", err)
 		} else {
-			logger.Printf("cycle done: %d new vacancy(ies)", newCount)
+			m.log.Printf("cycle done: %d new vacancy(ies)", newCount)
 		}
 		seed = false
-		if *once {
+		if once {
 			return
 		}
 		select {
 		case <-ctx.Done():
-			logger.Printf("shutting down")
+			m.log.Printf("shutting down")
 			return
-		case <-time.After(time.Duration(cfg.PollIntervalSec) * time.Second):
+		case <-time.After(time.Duration(m.cfg.PollIntervalSec) * time.Second):
 		}
 	}
+}
+
+// ScanNow runs a single cycle on demand (web UI button).
+func (m *Monitor) ScanNow(ctx context.Context) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n, err := m.cycle(ctx, false, 0)
+	m.setStatus(n)
+	return n, err
+}
+
+func (m *Monitor) setStatus(newCount int) {
+	m.statusMu.Lock()
+	m.lastRun = time.Now()
+	m.lastNew = newCount
+	m.statusMu.Unlock()
+}
+
+func (m *Monitor) LastRun() time.Time {
+	m.statusMu.Lock()
+	defer m.statusMu.Unlock()
+	return m.lastRun
+}
+
+func (m *Monitor) LastNew() int {
+	m.statusMu.Lock()
+	defer m.statusMu.Unlock()
+	return m.lastNew
 }
 
 func (m *Monitor) cycle(ctx context.Context, seed bool, limit int) (int, error) {
@@ -268,13 +340,14 @@ func resolveProfile(s Search) (string, error) {
 	return loadProfile(s.ProfilePath)
 }
 
-func setupLogger(path string) (*log.Logger, func(), error) {
+func setupLogger(path string) (*log.Logger, *lineBuffer, func(), error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	logger := log.New(io.MultiWriter(os.Stdout, f), "", log.LstdFlags)
-	return logger, func() { f.Close() }, nil
+	buf := newLineBuffer(1000)
+	logger := log.New(io.MultiWriter(os.Stdout, f, buf), "", log.LstdFlags)
+	return logger, buf, func() { f.Close() }, nil
 }
 
 func printRecent(store *Store, logger *log.Logger, n int) {

@@ -12,16 +12,16 @@ type Store struct {
 }
 
 type Vacancy struct {
-	ID          string
-	Title       string
-	Company     string
-	URL         string
-	Region      string
-	Salary      string
-	Description string
-	CoverLetter string
-	FoundAt     time.Time
-	PublishedAt time.Time
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	Company     string    `json:"company"`
+	URL         string    `json:"url"`
+	Region      string    `json:"region"`
+	Salary      string    `json:"salary"`
+	Description string    `json:"description"`
+	CoverLetter string    `json:"cover_letter"`
+	FoundAt     time.Time `json:"found_at"`
+	PublishedAt time.Time `json:"published_at"`
 }
 
 func openStore(path string) (*Store, error) {
@@ -74,6 +74,28 @@ func (s *Store) Count() (int, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT COUNT(1) FROM vacancies`).Scan(&n)
 	return n, err
+}
+
+func (s *Store) CountWithLetters() (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(1) FROM vacancies WHERE cover_letter <> ''`).Scan(&n)
+	return n, err
+}
+
+func (s *Store) Get(id string) (Vacancy, error) {
+	var v Vacancy
+	var foundAt, publishedAt string
+	err := s.db.QueryRow(
+		`SELECT id, title, company, url, region, salary, description, cover_letter, found_at, published_at
+		 FROM vacancies WHERE id = ?`, id).
+		Scan(&v.ID, &v.Title, &v.Company, &v.URL, &v.Region, &v.Salary,
+			&v.Description, &v.CoverLetter, &foundAt, &publishedAt)
+	if err != nil {
+		return v, err
+	}
+	v.FoundAt, _ = time.Parse(time.RFC3339, foundAt)
+	v.PublishedAt, _ = time.Parse(time.RFC3339, publishedAt)
+	return v, nil
 }
 
 func (s *Store) Recent(limit int) ([]Vacancy, error) {

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>hhmon — новые вакансии</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d2129; --line:#2a2f3a;
+    --text:#e6e9ef; --muted:#8b93a7; --accent:#4f8cff; --ok:#37c98b; --warn:#ffb454;
+    --danger:#ff5c6c;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Ubuntu,Arial,sans-serif}
+  header{display:flex;align-items:center;gap:16px;padding:12px 18px;
+    background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.3px}
+  .stats{display:flex;gap:18px;margin-left:auto;color:var(--muted);font-size:13px}
+  .stats b{color:var(--text)}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;
+    padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600}
+  button:hover{filter:brightness(1.1)}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--text);font-weight:500}
+  button.small{padding:5px 10px;font-size:12px;border-radius:6px}
+  .layout{display:grid;grid-template-columns:380px 1fr;height:calc(100vh - 57px)}
+  .sidebar{border-right:1px solid var(--line);overflow:auto;background:var(--panel)}
+  .list{list-style:none;margin:0;padding:0}
+  .item{padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+  .item:hover{background:var(--panel2)}
+  .item.active{background:#20283a;box-shadow:inset 3px 0 0 var(--accent)}
+  .item .t{font-weight:600;margin-bottom:3px;display:flex;gap:8px;align-items:baseline}
+  .badge{font-size:10px;padding:1px 6px;border-radius:999px;background:rgba(55,201,139,.15);
+    color:var(--ok);border:1px solid rgba(55,201,139,.4);white-space:nowrap}
+  .item .m{color:var(--muted);font-size:12px;display:flex;gap:8px;flex-wrap:wrap}
+  .detail{padding:22px 26px;overflow:auto}
+  .detail h2{margin:0 0 6px;font-size:20px}
+  .meta{color:var(--muted);font-size:13px;margin-bottom:14px;display:flex;gap:14px;flex-wrap:wrap}
+  .meta a{color:var(--accent);text-decoration:none}
+  .toolbar{display:flex;gap:8px;margin:14px 0}
+  .label{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:18px 0 6px}
+  textarea{width:100%;min-height:260px;background:var(--panel);color:var(--text);
+    border:1px solid var(--line);border-radius:10px;padding:14px;font:14px/1.6 inherit;resize:vertical}
+  pre.desc{white-space:pre-wrap;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:14px;max-height:340px;overflow:auto;color:#cfd5e3;font-size:13px}
+  details summary{cursor:pointer;color:var(--muted);margin:6px 0}
+  .empty{color:var(--muted);padding:40px;text-align:center}
+  .panel{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:14px 0;background:var(--panel)}
+  .panel .row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px dashed var(--line)}
+  .panel .row:last-child{border-bottom:0}
+  .panel .row span:last-child{color:var(--muted);text-align:right}
+  #log{position:fixed;right:16px;bottom:16px;width:640px;max-width:90vw;height:300px;
+    background:#0b0d11;border:1px solid var(--line);border-radius:10px;display:none;flex-direction:column;overflow:hidden;z-index:20}
+  #log.open{display:flex}
+  #log .h{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+  #log pre{margin:0;padding:10px 12px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#b9c0d0;flex:1}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ok);
+    color:#04160d;padding:8px 16px;border-radius:8px;font-weight:600;opacity:0;transition:.2s;z-index:30}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>hhmon</h1>
+  <button id="scanBtn" class="small">Сканировать</button>
+  <button id="logBtn" class="ghost small">Лог</button>
+  <div class="stats">
+    <div>всего: <b id="sTotal">0</b></div>
+    <div>с письмом: <b id="sLetter">0</b></div>
+    <div>последний скан: <b id="sLast">—</b></div>
+    <div>новых: <b id="sNew">0</b></div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar"><ul id="list" class="list"></ul></aside>
+  <main class="detail" id="detail">
+    <div class="empty">Выбери вакансию слева</div>
+  </main>
+</div>
+
+<div id="log"><div class="h"><b>Лог</b><button class="ghost small" id="logClose">закрыть</button></div><pre id="logBody"></pre></div>
+<div class="toast" id="toast">Скопировано</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let selected = null;
+
+async function j(url, opt){
+  const r = await fetch(url, opt);
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+function relTime(iso){
+  if(!iso) return "";
+  const d = new Date(iso); if(isNaN(d)) return "";
+  const s = Math.floor((Date.now()-d.getTime())/1000);
+  if(s < 60) return s+" сек назад";
+  if(s < 3600) return Math.floor(s/60)+" мин назад";
+  if(s < 86400) return Math.floor(s/3600)+" ч назад";
+  return Math.floor(s/86400)+" дн назад";
+}
+function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML;}
+
+async function refreshStatus(){
+  try{
+    const st = await j('/api/status');
+    $('sTotal').textContent = st.total;
+    $('sLetter').textContent = st.with_letter;
+    $('sNew').textContent = st.last_new;
+    $('sLast').textContent = st.last_run ? relTime(st.last_run) : '—';
+  }catch(e){}
+}
+
+async function refreshList(){
+  let items = [];
+  try{ items = await j('/api/vacancies?limit=100'); }catch(e){ return; }
+  const ul = $('list');
+  if(items.length === 0){
+    ul.innerHTML = '<li class="empty" style="list-style:none">Пока пусто.<br>Нажми «Сканировать».</li>';
+    return;
+  }
+  ul.innerHTML = items.map(v => `
+    <li class="item ${v.id===selected?'active':''}" data-id="${v.id}">
+      <div class="t">${esc(v.title)} ${v.has_letter?'<span class="badge">письмо</span>':''}</div>
+      <div class="m">
+        <span>${esc(v.company)}</span>
+        <span>${esc(v.region)}</span>
+        ${v.salary?'<span>'+esc(v.salary)+'</span>':''}
+        <span>${relTime(v.found_at)}</span>
+      </div>
+    </li>`).join('');
+  ul.querySelectorAll('.item').forEach(el => el.onclick = () => load(el.dataset.id));
+}
+
+async function load(id){
+  selected = id;
+  const v = await j('/api/vacancy?id='+encodeURIComponent(id));
+  $('detail').innerHTML = `
+    <h2>${esc(v.Title || v.title)}</h2>
+    <div class="meta">
+      <span>${esc(v.Company || v.company)}</span>
+      <span>${esc(v.Region || v.region)}</span>
+      ${(v.Salary||v.salary)?'<span>'+esc(v.Salary||v.salary)+'</span>':''}
+      <span>опубликовано: ${relTime(v.PublishedAt || v.published_at)}</span>
+      <a href="${esc(v.URL || v.url)}" target="_blank" rel="noopener">открыть на hh.ru →</a>
+    </div>
+    <div class="toolbar">
+      <button id="copyBtn" class="small">Скопировать сопроводительное</button>
+      <button id="openBtn" class="ghost small">Открыть вакансию</button>
+    </div>
+    <div class="label">Сопроводительное письмо</div>
+    <textarea id="letter">${esc(v.CoverLetter ?? v.cover_letter ?? '')}</textarea>
+    <div class="label">Описание вакансии</div>
+    <details><summary>показать</summary><pre class="desc">${esc(v.Description ?? v.description ?? '')}</pre></details>`;
+  $('copyBtn').onclick = () => copy($('letter').value);
+  $('openBtn').onclick = () => window.open(v.URL || v.url, '_blank');
+  refreshList();
+}
+
+function copy(text){
+  navigator.clipboard.writeText(text).then(()=>{
+    const t=$('toast'); t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1200);
+  });
+}
+
+async function doScan(){
+  $('scanBtn').disabled = true; $('scanBtn').textContent = 'Сканирую…';
+  try{ await j('/api/scan', {method:'POST'}); }
+  catch(e){ alert('Ошибка скана: '+e.message); }
+  $('scanBtn').disabled = false; $('scanBtn').textContent = 'Сканировать';
+  await refreshStatus(); await refreshList();
+}
+
+async function refreshLog(){
+  if(!$('log').classList.contains('open')) return;
+  try{ const lines = await j('/api/log?lines=200'); $('logBody').textContent = lines.join('\n'); }catch(e){}
+}
+
+$('scanBtn').onclick = doScan;
+$('logBtn').onclick = () => {$('log').classList.add('open'); refreshLog();};
+$('logClose').onclick = () => $('log').classList.remove('open');
+
+refreshStatus(); refreshList();
+setInterval(refreshStatus, 5000);
+setInterval(refreshList, 5000);
+setInterval(refreshLog, 3000);
+</script>
+</body>
+</html>
