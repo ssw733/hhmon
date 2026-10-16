@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -54,6 +55,36 @@ func rssURL(query string, areas []int, periodDays int) string {
 }
 
 func fetchRSS(client *http.Client, query string, areas []int, periodDays int) ([]RSSItem, error) {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 1500 * time.Millisecond)
+		}
+		items, err := fetchRSSOnce(client, query, areas, periodDays)
+		if err == nil {
+			return items, nil
+		}
+		lastErr = err
+		if isPermanentRSSError(err) {
+			return nil, err
+		}
+	}
+	return nil, lastErr
+}
+
+type rssStatusError struct{ code int }
+
+func (e rssStatusError) Error() string { return fmt.Sprintf("rss status %d", e.code) }
+
+func isPermanentRSSError(err error) bool {
+	var se rssStatusError
+	if errors.As(err, &se) {
+		return se.code != http.StatusTooManyRequests && se.code < 500
+	}
+	return false
+}
+
+func fetchRSSOnce(client *http.Client, query string, areas []int, periodDays int) ([]RSSItem, error) {
 	req, err := http.NewRequest(http.MethodGet, rssURL(query, areas, periodDays), nil)
 	if err != nil {
 		return nil, err
@@ -67,7 +98,7 @@ func fetchRSS(client *http.Client, query string, areas []int, periodDays int) ([
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("rss status %d", resp.StatusCode)
+		return nil, rssStatusError{code: resp.StatusCode}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
