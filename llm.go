@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Generator interface {
@@ -69,7 +70,53 @@ func (e *llmHTTPError) Error() string {
 // switchable; only the last provider's error is surfaced if all fail.
 func retryable(err error) bool { return true }
 
-// ---- Provider chain with automatic failover ----
+// checkLLMReachability pings configured Ollama endpoints and logs a clear
+// warning if they are unreachable (letters/applies won't work without an LLM).
+func checkLLMReachability(cfg Config, logger *log.Logger) {
+	seen := map[string]bool{}
+	var urls []string
+	collect := func(c LLMConfig) {
+		if !strings.EqualFold(c.Provider, "ollama") {
+			return
+		}
+		base := c.BaseURL
+		if base == "" {
+			base = "http://localhost:11434"
+		}
+		if !seen[base] {
+			seen[base] = true
+			urls = append(urls, base)
+		}
+	}
+	collect(cfg.LLM)
+	for _, c := range cfg.LLMChain {
+		collect(c)
+	}
+	for _, s := range cfg.Searches {
+		for _, c := range s.LLMChain {
+			collect(c)
+		}
+		if s.LLM != nil {
+			collect(*s.LLM)
+		}
+	}
+	client := newHTTPClient(4 * time.Second)
+	for _, base := range urls {
+		resp, err := client.Get(strings.TrimRight(base, "/") + "/api/tags")
+		if err != nil {
+			logger.Printf("LLM: Ollama НЕ доступна (%s): %v", base, err)
+			logger.Printf("LLM: запусти `ollama serve` и `ollama pull <модель>` — иначе письма и отклики работать не будут")
+			continue
+		}
+		code := resp.StatusCode
+		resp.Body.Close()
+		if code == http.StatusOK {
+			logger.Printf("LLM: Ollama доступна (%s)", base)
+		} else {
+			logger.Printf("LLM: Ollama ответила HTTP %d (%s)", code, base)
+		}
+	}
+}
 
 type chainEntry struct {
 	name string

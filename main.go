@@ -151,6 +151,7 @@ func main() {
 	total, _ := store.Count()
 	logger.Printf("=== hhmon started === searches=%d interval=%ds db_vacancies=%d",
 		len(runs), cfg.PollIntervalSec, total)
+	checkLLMReachability(cfg, logger)
 
 	seed := *seedOnly
 	if cfg.SeedOnFirstRun && total == 0 {
