@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -131,6 +134,9 @@ func parseResumes(body []byte) []resume {
 
 // Apply performs a real (or dry-run) response to a vacancy.
 func (a *Applier) Apply(ctx context.Context, v Vacancy) (string, error) {
+	if strings.EqualFold(a.cfg.Engine, "browser") {
+		return a.applyBrowser(ctx, v)
+	}
 	res, err := a.resolveResume(ctx)
 	if err != nil {
 		return "failed", err
@@ -183,6 +189,67 @@ func (a *Applier) Apply(ctx context.Context, v Vacancy) (string, error) {
 	}
 	a.log.Printf("  apply: отклик отправлен на %s (status=%s)", v.ID, status)
 	return status, nil
+}
+
+type applyResult struct {
+	Status string `json:"status"`
+	Error  string `json:"error"`
+}
+
+func parseApplyResult(out string) applyResult {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(line, "{") {
+			var r applyResult
+			if json.Unmarshal([]byte(line), &r) == nil && r.Status != "" {
+				return r
+			}
+		}
+	}
+	return applyResult{}
+}
+
+// applyBrowser performs the response through a real browser (Playwright),
+// because hh.ru drops/closes raw non-browser HTTP requests on /applicant/*.
+func (a *Applier) applyBrowser(ctx context.Context, v Vacancy) (string, error) {
+	if strings.TrimSpace(v.CoverLetter) == "" {
+		return "failed", fmt.Errorf("нет сопроводительного письма")
+	}
+	tmp, err := os.CreateTemp("", "hh-letter-*.txt")
+	if err != nil {
+		return "failed", err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.WriteString(v.CoverLetter); err != nil {
+		tmp.Close()
+		return "failed", err
+	}
+	tmp.Close()
+
+	args := []string{"tools/hh-apply.mjs", "--id", v.ID, "--letter", tmp.Name(), "--session", a.cfg.SessionPath}
+	if a.cfg.DryRun {
+		args = append(args, "--dry")
+	}
+	cmd := exec.CommandContext(ctx, "node", args...)
+	out, err := cmd.CombinedOutput()
+	txt := strings.TrimSpace(string(out))
+	for _, line := range strings.Split(txt, "\n") {
+		if strings.TrimSpace(line) != "" {
+			a.log.Printf("  node: %s", line)
+		}
+	}
+	if err != nil {
+		return "failed", fmt.Errorf("браузерный отклик: %v", err)
+	}
+	res := parseApplyResult(txt)
+	if res.Status == "" {
+		return "failed", fmt.Errorf("не получил результат от браузера")
+	}
+	if res.Status == "failed" && res.Error != "" {
+		return "failed", fmt.Errorf("%s", res.Error)
+	}
+	return res.Status, nil
 }
 
 func (a *Applier) submit(ctx context.Context, action string, vals url.Values, referer string) (string, error) {

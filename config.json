@@ -27,7 +27,8 @@
     "session_path": "session.json",
     "resume_title_contains": "backend",
     "questions_via_llm": true,
-    "skip_with_questions": false
+    "skip_with_questions": false,
+    "engine": "browser"
   },
 
   "searches": [

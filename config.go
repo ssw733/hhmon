@@ -42,6 +42,7 @@ type ApplyConfig struct {
 	QuestionsViaLLM     bool   `json:"questions_via_llm"`
 	SkipWithQuestions   bool   `json:"skip_with_questions"`
 	BaseURL             string `json:"base_url"`
+	Engine              string `json:"engine"`
 }
 
 type Config struct {
@@ -105,6 +106,9 @@ func loadConfig(path string) (Config, error) {
 	}
 	if cfg.Apply.BaseURL == "" {
 		cfg.Apply.BaseURL = "https://hh.ru"
+	}
+	if cfg.Apply.Engine == "" {
+		cfg.Apply.Engine = "browser"
 	}
 	if len(cfg.Searches) == 0 {
 		return cfg, fmt.Errorf("config: no searches defined")
