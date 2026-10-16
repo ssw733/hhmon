@@ -43,7 +43,16 @@ CREATE TABLE IF NOT EXISTS vacancies (
 	found_at     TEXT,
 	published_at TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_vacancies_found_at ON vacancies(found_at);`
+CREATE INDEX IF NOT EXISTS idx_vacancies_found_at ON vacancies(found_at);
+CREATE TABLE IF NOT EXISTS applications (
+	vacancy_id  TEXT PRIMARY KEY,
+	resume_hash TEXT,
+	status      TEXT,
+	letter      TEXT,
+	error       TEXT,
+	applied_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_applications_applied_at ON applications(applied_at);`
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, err
@@ -96,6 +105,40 @@ func (s *Store) Get(id string) (Vacancy, error) {
 	v.FoundAt, _ = time.Parse(time.RFC3339, foundAt)
 	v.PublishedAt, _ = time.Parse(time.RFC3339, publishedAt)
 	return v, nil
+}
+
+func (s *Store) RecordApplication(vacancyID, resumeHash, status, letter, errMsg string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO applications (vacancy_id, resume_hash, status, letter, error, applied_at)
+		 VALUES (?,?,?,?,?,?)
+		 ON CONFLICT(vacancy_id) DO UPDATE SET
+		   resume_hash=excluded.resume_hash, status=excluded.status,
+		   letter=excluded.letter, error=excluded.error, applied_at=excluded.applied_at`,
+		vacancyID, resumeHash, status, letter, errMsg, time.Now().Format(time.RFC3339),
+	)
+	return err
+}
+
+func (s *Store) HasApplied(vacancyID string) (bool, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(1) FROM applications WHERE vacancy_id = ?`, vacancyID).Scan(&n)
+	return n > 0, err
+}
+
+func (s *Store) AppliedSince(t time.Time) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(1) FROM applications WHERE applied_at >= ?`,
+		t.Format(time.RFC3339)).Scan(&n)
+	return n, err
+}
+
+func (s *Store) LastAppliedAt() (time.Time, error) {
+	var raw string
+	err := s.db.QueryRow(`SELECT applied_at FROM applications ORDER BY applied_at DESC LIMIT 1`).Scan(&raw)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Parse(time.RFC3339, raw)
 }
 
 func (s *Store) Recent(limit int) ([]Vacancy, error) {

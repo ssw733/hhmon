@@ -22,15 +22,18 @@
     { "provider": "ollama", "model": "qwen2.5:14b", "base_url": "http://localhost:11434" }
   ],
 
+  "apply": {
+    "enabled": false,
+    "dry_run": true,
+    "max_per_day": 20,
+    "min_delay_seconds": 120,
+    "session_path": "session.json",
+    "resume_title_contains": "backend",
+    "questions_via_llm": true,
+    "skip_with_questions": false
+  },
+
   "searches": [
-    {
-      "name": "Go backend",
-      "query": "golang",
-      "areas": [1],
-      "search_period_days": 1,
-      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
-      "profile_paths": ["profile.md", "profiles/go.md"]
-    },
     {
       "name": "PHP backend",
       "query": "php разработчик",
@@ -40,12 +43,20 @@
       "profile_paths": ["profile.md", "profiles/php.md"]
     },
     {
-      "name": "Blockchain / Crypto",
-      "query": "blockchain",
+      "name": "PHP Symfony/Laravel",
+      "query": "symfony laravel",
       "areas": [1],
       "search_period_days": 1,
       "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
-      "profile_paths": ["profile.md", "profiles/blockchain.md"]
+      "profile_paths": ["profile.md", "profiles/php.md"]
+    },
+    {
+      "name": "Go backend",
+      "query": "golang",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/go.md"]
     },
     {
       "name": "Backend / highload",
@@ -56,12 +67,20 @@
       "profile_paths": ["profile.md", "profiles/highload.md"]
     },
     {
-      "name": "ML-инженер",
-      "query": "machine learning",
+      "name": "JavaScript / Node.js",
+      "query": "node.js разработчик",
       "areas": [1],
       "search_period_days": 1,
       "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
-      "profile_paths": ["profile.md", "profiles/ml.md"]
+      "profile_paths": ["profile.md", "profiles/js.md"]
+    },
+    {
+      "name": "Blockchain / Crypto",
+      "query": "blockchain",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/blockchain.md"]
     },
     {
       "name": "Data Science",
@@ -78,6 +97,14 @@
       "search_period_days": 1,
       "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
       "profile_paths": ["profile.md", "profiles/data.md"]
+    },
+    {
+      "name": "ML-инженер",
+      "query": "machine learning",
+      "areas": [1],
+      "search_period_days": 1,
+      "exclude_keywords": ["1С", "QA", "тестировщик", "стажёр", "стажер", "продаж", "менеджер"],
+      "profile_paths": ["profile.md", "profiles/ml.md"]
     },
     {
       "name": "Embedded",

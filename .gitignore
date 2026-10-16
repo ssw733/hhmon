@@ -3,3 +3,6 @@ hhmon.log
 *.db
 *.log
 /hhmon
+session.json
+node_modules
+playwright-report

@@ -31,6 +31,19 @@ type Search struct {
 	LLMChain         []LLMConfig `json:"llm_chain,omitempty"`
 }
 
+// ApplyConfig controls automatic responses to vacancies.
+type ApplyConfig struct {
+	Enabled             bool   `json:"enabled"`
+	DryRun              bool   `json:"dry_run"`
+	MaxPerDay           int    `json:"max_per_day"`
+	MinDelaySeconds     int    `json:"min_delay_seconds"`
+	SessionPath         string `json:"session_path"`
+	ResumeTitleContains string `json:"resume_title_contains"`
+	QuestionsViaLLM     bool   `json:"questions_via_llm"`
+	SkipWithQuestions   bool   `json:"skip_with_questions"`
+	BaseURL             string `json:"base_url"`
+}
+
 type Config struct {
 	PollIntervalSec int         `json:"poll_interval_seconds"`
 	RequestJitterMS int         `json:"request_jitter_ms"`
@@ -40,6 +53,7 @@ type Config struct {
 	LogPath         string      `json:"log_path"`
 	LLM             LLMConfig   `json:"llm"`
 	LLMChain        []LLMConfig `json:"llm_chain"`
+	Apply           ApplyConfig `json:"apply"`
 	Searches        []Search    `json:"searches"`
 }
 
@@ -76,6 +90,21 @@ func loadConfig(path string) (Config, error) {
 	}
 	if cfg.LLM.Provider == "" {
 		cfg.LLM = defaultLLM()
+	}
+	if cfg.Apply.SessionPath == "" {
+		cfg.Apply.SessionPath = "session.json"
+	}
+	if cfg.Apply.MaxPerDay <= 0 {
+		cfg.Apply.MaxPerDay = 20
+	}
+	if cfg.Apply.MinDelaySeconds <= 0 {
+		cfg.Apply.MinDelaySeconds = 120
+	}
+	if cfg.Apply.ResumeTitleContains == "" {
+		cfg.Apply.ResumeTitleContains = "backend"
+	}
+	if cfg.Apply.BaseURL == "" {
+		cfg.Apply.BaseURL = "https://hh.ru"
 	}
 	if len(cfg.Searches) == 0 {
 		return cfg, fmt.Errorf("config: no searches defined")

@@ -16,7 +16,9 @@ type fakeGen struct {
 }
 
 func (f *fakeGen) Generate(ctx context.Context, system, user string) (string, error) {
-	*f.calls++
+	if f.calls != nil {
+		*f.calls++
+	}
 	if f.fail {
 		return "", errors.New("limit exceeded")
 	}

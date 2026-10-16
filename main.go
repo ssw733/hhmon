@@ -31,6 +31,7 @@ type Monitor struct {
 	searches    []searchRun
 	log         *log.Logger
 	seenThisRun map[string]bool
+	applier     *Applier
 	mu          sync.Mutex
 	statusMu    sync.Mutex
 	lastRun     time.Time
@@ -87,6 +88,17 @@ func main() {
 		runs = append(runs, searchRun{name: s.Name, search: s, profile: profile, gen: gen})
 	}
 
+	var applier *Applier
+	if cfg.Apply.Enabled {
+		ap, err := newApplier(cfg.Apply, store, runs[0].gen, runs[0].profile, logger)
+		if err != nil {
+			logger.Fatalf("apply: %v", err)
+		}
+		applier = ap
+		logger.Printf("apply: включён (dry_run=%v, resume~%q, max/день=%d, пауза=%ds)",
+			cfg.Apply.DryRun, cfg.Apply.ResumeTitleContains, cfg.Apply.MaxPerDay, cfg.Apply.MinDelaySeconds)
+	}
+
 	m := &Monitor{
 		cfg:         cfg,
 		store:       store,
@@ -94,6 +106,7 @@ func main() {
 		searches:    runs,
 		log:         logger,
 		seenThisRun: map[string]bool{},
+		applier:     applier,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -278,7 +291,42 @@ func (m *Monitor) handle(ctx context.Context, run searchRun, it RSSItem) error {
 		return err
 	}
 	m.log.Printf("  saved. url=%s", it.URL)
+
+	if m.applier != nil && v.CoverLetter != "" {
+		m.maybeApply(ctx, v)
+	}
 	return nil
+}
+
+func (m *Monitor) maybeApply(ctx context.Context, v Vacancy) {
+	applied, err := m.store.HasApplied(v.ID)
+	if err != nil {
+		m.log.Printf("  apply: db error %v", err)
+		return
+	}
+	if applied {
+		return
+	}
+	now := time.Now()
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	if cnt, err := m.store.AppliedSince(startOfDay); err == nil && cnt >= m.cfg.Apply.MaxPerDay {
+		m.log.Printf("  apply %s: дневной лимит %d достигнут — пропуск", v.ID, m.cfg.Apply.MaxPerDay)
+		return
+	}
+	if last, err := m.store.LastAppliedAt(); err == nil {
+		if wait := time.Duration(m.cfg.Apply.MinDelaySeconds)*time.Second - time.Since(last); wait > 0 {
+			m.log.Printf("  apply %s: пауза между откликами, пропуск (подождать %s)", v.ID, wait.Round(time.Second))
+			return
+		}
+	}
+	status, err := m.applier.Apply(ctx, v)
+	if err != nil {
+		m.log.Printf("  apply %s: ОШИБКА %v", v.ID, err)
+		_ = m.store.RecordApplication(v.ID, "", "failed", v.CoverLetter, err.Error())
+		return
+	}
+	_ = m.store.RecordApplication(v.ID, "", status, v.CoverLetter, "")
+	m.log.Printf("  apply %s: %s", v.ID, status)
 }
 
 func (m *Monitor) jitter() {
